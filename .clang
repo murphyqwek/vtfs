@@ -1,0 +1,8 @@
+CompileFlags:
+  Remove:
+    - -mrecord-mcount
+
+Diagnostics:
+  ClangTidy:
+    Remove:
+      - readability-identifier-length

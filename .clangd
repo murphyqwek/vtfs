@@ -1,0 +1,13 @@
+InlayHints:
+  Designators: No
+  Enabled: No
+  DeducedTypes: No
+
+CompileFlags:
+  Remove:
+    - -mrecord-mcount
+
+Diagnostics:
+  ClangTidy:
+    Remove:
+      - readability-identifier-length
