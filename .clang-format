@@ -1,19 +1,24 @@
----
-Language: Cpp
 BasedOnStyle: Google
+Language: Cpp
+
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ContinuationIndentWidth: 4
 
 ColumnLimit: 100
-AccessModifierOffset: -2
+BreakBeforeBraces: Attach
+
+PointerAlignment: Right
+DerivePointerAlignment: false
 
 AllowShortFunctionsOnASingleLine: None
-AllowShortIfStatementsOnASingleLine: false
+AllowShortIfStatementsOnASingleLine: Never
 AllowShortLoopsOnASingleLine: false
 
-DerivePointerAlignment: false
-BreakConstructorInitializers: BeforeComma
-AlignAfterOpenBracket: BlockIndent
+BinPackArguments: true
+BinPackParameters: BinPack
 
-BinPackArguments: false
-BinPackParameters: false
+AlignAfterOpenBracket: Align
 
-AlignArrayOfStructures: Right
+SortIncludes: Never
