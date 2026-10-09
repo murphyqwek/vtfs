@@ -1,6 +1,8 @@
 #ifndef VTFS_DIRECTORY_H
 #define VTFS_DIRECTORY_H
 
+#include <linux/types.h>
+
 typedef struct vtfs_node vtfs_node;
 
 typedef struct vtfs_dir_entry {
@@ -10,10 +12,16 @@ typedef struct vtfs_dir_entry {
 } vtfs_dir_entry;
 
 typedef struct vtfs_dir {
-    int length;
-    int capacity;
+    size_t length;
+    size_t capacity;
 
     vtfs_dir_entry *entries;
 } vtfs_dir;
+
+vtfs_dir directory_create(void);
+
+// Нужно сначала освободить удалить все ссылки внутренних node
+// TODO: сначала реализовать fs_node_get
+void directory_free(vtfs_dir_entry *dir);
 
 #endif

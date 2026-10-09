@@ -9,13 +9,11 @@
 #include "linux/mnt_idmapping.h"
 #include "linux/sched.h"
 
-#define MODULE_NAME "vtfs"
+#include "helpers.h"
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Arseny Starikov P3313");
 MODULE_DESCRIPTION("A simple FS kernel module");
-
-#define LOG(fmt, ...) pr_info("[" MODULE_NAME "]: " fmt, ##__VA_ARGS__)
 
 struct file_system_type my_vtfs_type = {
     .name = "vtfs", .mount = vtfs_mount, .kill_sb = vtfs_kill_sb};
