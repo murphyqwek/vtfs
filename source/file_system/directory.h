@@ -3,6 +3,8 @@
 
 #include <linux/types.h>
 
+#define MAX_DIRECTORY_CAPACITY 25
+
 typedef struct vtfs_node vtfs_node;
 
 typedef struct vtfs_dir_entry {
@@ -18,10 +20,12 @@ typedef struct vtfs_dir {
     vtfs_dir_entry *entries;
 } vtfs_dir;
 
-vtfs_dir directory_create(void);
+vtfs_dir directory_init(void);
+
+int directory_init_capacity(vtfs_dir *dir, size_t init_capacity);
 
 // Нужно сначала освободить удалить все ссылки внутренних node
-// TODO: сначала реализовать fs_node_get
+// TODO: сначала реализовать fs_node_put
 void directory_free(vtfs_dir_entry *dir);
 
 #endif
