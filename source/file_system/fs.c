@@ -4,6 +4,11 @@
 #include <linux/slab.h>
 #include <linux/fs.h>
 #include "../helpers.h"
+#include "asm-generic/errno-base.h"
+#include "directory.h"
+#include "node.h"
+
+static int fs_init_new_node(struct super_block *sb, vtfs_node_type type, vtfs_node *node);
 
 /**
  * fs_init_info - inits a new filesystem information
@@ -82,4 +87,48 @@ unsigned long fs_get_next_inode_no(struct super_block *super_block) {
     unsigned long new_no = atomic64_fetch_inc(&info->next_inode_no);
 
     return new_no;
+}
+
+/**
+ * fs_init_directory - inits a new directroy
+ * @sb: pointer to super_block
+ * @node: pointer to vtfs_node of a new directroy
+ *
+ *
+ * Return: error code or 0 if all good
+ */
+int fs_init_directory(struct super_block *sb, vtfs_node *node) {
+    return fs_init_new_node(sb, VTFS_FOLDER, node);
+}
+
+/**
+ * fs_init_file - inits a new file
+ * @sb: pointer to super_block
+ * @node: pointer to a new file node
+ *
+ * Return: error code or 0 if all good
+ */
+int fs_init_file(struct super_block *sb, vtfs_node *node) {
+    return fs_init_new_node(sb, VTFS_FILE, node);
+}
+
+int fs_init_new_node(struct super_block *sb, vtfs_node_type type, vtfs_node *node) {
+    if (!sb) {
+        ERR("filesystem got null pointer to super_block");
+        return -EINVAL;
+    }
+    unsigned long id = fs_get_next_inode_no(sb);
+
+    if (id == 0) {
+        ERR("Couldn't initialized new vtfs_node because couldn't get new inode no");
+        return -EINVAL;
+    }
+
+    int result = node_init(&node, type, id);
+
+    if (result < 0) {
+        ERR("Couldn't initialized new node");
+    }
+
+    return result;
 }
