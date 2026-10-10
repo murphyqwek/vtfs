@@ -24,8 +24,6 @@ vtfs_dir directory_init(void);
 
 int directory_init_capacity(vtfs_dir *dir, size_t init_capacity);
 
-// Нужно сначала освободить удалить все ссылки внутренних node
-// TODO: сначала реализовать fs_node_put
-void directory_free(vtfs_dir_entry *dir);
+void directory_free(vtfs_dir *dir);
 
 #endif

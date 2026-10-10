@@ -1,8 +1,10 @@
 #include "directory.h"
-#include "asm-generic/errno-base.h"
-#include "linux/gfp_types.h"
-#include "linux/slab.h"
-#include "linux/stddef.h"
+#include "node.h"
+
+#include <linux/gfp.h>
+#include <linux/errno.h>
+#include <linux/slab.h>
+#include <linux/stddef.h>
 #include "../helpers.h"
 
 /**
@@ -20,6 +22,7 @@ vtfs_dir directory_init(void) {
     new_dir.length = 0;
     new_dir.entries = NULL;
 
+    LOG("new directory was initialized");
     return new_dir;
 }
 
@@ -39,7 +42,12 @@ int directory_init_capacity(vtfs_dir *dir, size_t init_capacity) {
     }
 
     if (init_capacity > MAX_DIRECTORY_CAPACITY) {
-        WARN("Couldn't init directory capacity because capacity was too big");
+        WRN("Couldn't init directory capacity because capacity was too big");
+        return -EINVAL;
+    }
+
+    if (dir->entries || dir->capacity || dir->length) {
+        ERR("directory_init_capacity should be used only for recently initialized direcotries");
         return -EINVAL;
     }
 
@@ -53,13 +61,36 @@ int directory_init_capacity(vtfs_dir *dir, size_t init_capacity) {
     dir->entries = entries;
     dir->capacity = init_capacity;
 
+    LOG("directory capacity was initialized");
     return 0;
 }
 
-// TODO: implement basic fs function and fs_node operation
 /**
- * All we need is iterate throw directory and dec all files refcount
- * by ref count we can easily free node, if refcount equal to zero
- * when we dec all refcounts, we can just free the array peacfully (namaste)
+ * directory_free - free directory and it's children recursivly
+ * @dir: pointer to vtfs_dir
+ *
+ * Should be called only by node_dec_refcount
+ *
+ * Return: Nothing
  */
-void directory_free(vtfs_dir_entry *dir);
+void directory_free(vtfs_dir *dir) {
+    if (!dir) {
+        return;
+    }
+
+    // Сначала мы отпускаем ссылки на все дочерние файлы
+    for (size_t i = 0; i < dir->length; i++) {
+        // Освобождаем имя файла и отпускаем ссылку на файл
+        kfree(dir->entries[i].name);
+        node_dec_refcount(dir->entries[i].node);
+    }
+
+    // Освобождаем entries
+    kfree(dir->entries);
+
+    dir->entries = NULL;
+    dir->capacity = 0;
+    dir->length = 0;
+
+    LOG("directory was free");
+}

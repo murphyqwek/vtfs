@@ -2,7 +2,7 @@ ifneq ($(KERNELRELEASE),)
 
 obj-m += vtfs.o 
 
-src_files := $(wildcard $(src)/source/*.c)
+src_files := $(shell find $(src)/source -type f -name '*.c')
 vtfs-y := $(patsubst $(src)/%.c,%.o,$(src_files))
 
 ccflags-y += -Wall -g

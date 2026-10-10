@@ -2,6 +2,7 @@
 #define VTFS_NODE_H
 
 #include <linux/refcount.h>
+#include <linux/types.h>
 
 #include "directory.h"
 #include "file.h"
@@ -23,4 +24,6 @@ typedef struct vtfs_node {
     };
 } vtfs_node;
 
+void node_inc_refcount(vtfs_node *node);
+void node_dec_refcount(vtfs_node *node);
 #endif

@@ -1,7 +1,8 @@
 #include <linux/slab.h>
 #include "../helpers.h"
 #include "asm-generic/errno-base.h"
-#include "linux/gfp_types.h"
+#include <linux/errno.h>
+#include <linux/gfp.h>
 #include "file.h"
 
 /**
@@ -17,14 +18,16 @@ vtfs_file file_init(void) {
     file.capacity = 0;
     file.length = 0;
     file.data = NULL;
-
+    LOG("new file was initialized");
     return file;
 }
 
 /**
- * file_init_capacity - init data with init_capacity. WARNING: IT IS USED FOR NEW FILES!!!
+ * file_init_capacity - init data with init_capacity
  * @init_capacity: capacity for data
  * @file: recently created file
+ *
+ * Should be used only for recently initialized files
  *
  * Return: return code for memory alloc
  */
@@ -36,8 +39,13 @@ int file_init_capacity(vtfs_file *file, size_t init_capacity) {
 
     // Проверка на то, что файл не слишком большой
     if (init_capacity * sizeof(char) > MAX_FILE_SIZE) {
-        WARN("Couldn't create new file because it's size was too big");
+        WRN("Couldn't create new file because it's size was too big");
         return -EFBIG;
+    }
+
+    if (file->capacity || file->length || file->data) {
+        ERR("file_init_capacity's argument file must be recently initialized file");
+        return -EINVAL;
     }
 
     // Пытаемся выделить память
@@ -50,7 +58,7 @@ int file_init_capacity(vtfs_file *file, size_t init_capacity) {
 
     file->data = data;
     file->capacity = init_capacity;
-
+    LOG("new file capacity was initialized");
     return 0;
 }
 
@@ -58,7 +66,7 @@ int file_init_capacity(vtfs_file *file, size_t init_capacity) {
  * file_free - free memory for data
  * @*file: file to free
  *
- *
+ * Should be called only node_dec_refcounter
  *
  * Return: void
  */
@@ -71,4 +79,6 @@ void file_free(vtfs_file *file) {
 
     file->length = 0;
     file->capacity = 0;
+
+    LOG("file was free");
 }

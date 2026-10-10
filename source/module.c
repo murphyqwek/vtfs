@@ -11,6 +11,8 @@
 
 #include "helpers.h"
 
+#include "file_system/fs.h"
+
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Arseny Starikov P3313");
 MODULE_DESCRIPTION("A simple FS kernel module");
@@ -31,18 +33,29 @@ struct dentry *vtfs_mount(struct file_system_type *fs_type, int flags, const cha
 }
 
 int vtfs_fill_super(struct super_block *sb, void *data, int silent) {
-    struct inode *inode = vtfs_get_inode(sb, NULL, S_IFDIR, 1000);
+    struct inode *inode = vtfs_get_inode(sb, NULL, S_IFDIR, 0);
 
     sb->s_root = d_make_root(inode);
     if (sb->s_root == NULL) {
         return -ENOMEM;
     }
 
+    int result = fs_init_info(sb);
+
+    if (result < 0) {
+        ERR("COULDN'T CREATE SUPER_BLOCK!!!!!");
+        return result;
+    }
+
     printk(KERN_INFO "Created super block\n");
     return 0;
 }
 
-void vtfs_kill_sb(struct super_block *) {
+void vtfs_kill_sb(struct super_block *sb) {
+    // TODO: Очистить дерево файловой системы
+
+    fs_free_info(sb);
+
     printk(KERN_INFO "VTFS was unmounted");
 }
 
