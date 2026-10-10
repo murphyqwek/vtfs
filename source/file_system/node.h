@@ -3,6 +3,7 @@
 
 #include <linux/refcount.h>
 #include <linux/types.h>
+#include <linux/mutex.h>
 
 #include "directory.h"
 #include "file.h"
@@ -18,6 +19,8 @@ typedef struct vtfs_node {
     vtfs_node_type type;
     refcount_t ref_count;
 
+    struct mutex mutex;
+
     union {
         vtfs_dir directory;
         vtfs_file file;
@@ -26,4 +29,7 @@ typedef struct vtfs_node {
 
 void node_inc_refcount(vtfs_node *node);
 void node_dec_refcount(vtfs_node *node);
+
+int node_init(vtfs_node **node, vtfs_node_type type, unsigned long id);
+
 #endif
