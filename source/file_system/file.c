@@ -1,5 +1,6 @@
 #include <linux/slab.h>
 #include "../helpers.h"
+#include "linux/stddef.h"
 #include <linux/errno.h>
 #include <linux/gfp.h>
 #include "file.h"
@@ -81,6 +82,7 @@ void file_free(vtfs_file *file) {
 
     kfree(file->data);
 
+    file->data = NULL;
     file->length = 0;
     file->capacity = 0;
 

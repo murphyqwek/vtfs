@@ -7,15 +7,10 @@
 #include <linux/slab.h>
 
 #include "../helpers.h"
-#include "fs.h"
 #include "linux/gfp_types.h"
 #include "linux/mutex.h"
-#include "linux/refcount_types.h"
 
 static void node_free(vtfs_node *node);
-
-static void node_init_directory(vtfs_node *node);
-static void node_init_file(vtfs_node *node);
 
 /**
  * node_inc_refcount - increment refcount of a node
@@ -96,7 +91,7 @@ int node_init(vtfs_node **node, vtfs_node_type type, unsigned long id) {
 
     result = kzalloc(sizeof(vtfs_node), GFP_KERNEL);
 
-    if (result) {
+    if (!result) {
         ERR("node_init couldn't allocate memory for vtfs_node");
         return -ENOMEM;
     }

@@ -4,11 +4,12 @@
 #include <linux/slab.h>
 #include <linux/fs.h>
 #include "../helpers.h"
-#include "asm-generic/errno-base.h"
 #include "directory.h"
+#include "linux/stddef.h"
 #include "node.h"
 
-static int fs_init_new_node(struct super_block *sb, vtfs_node_type type, vtfs_node *node);
+static int fs_init_new_node(struct super_block *sb, vtfs_node_type type, vtfs_node **node);
+static int fs_init_new_node_with_id(unsigned long id, vtfs_node_type type, vtfs_node **node);
 
 /**
  * fs_init_info - inits a new filesystem information
@@ -32,7 +33,7 @@ int fs_init_info(struct super_block *block) {
         return -ENOMEM;
     }
 
-    atomic64_set(&info->next_inode_no, 1);
+    atomic_long_set(&info->next_inode_no, 2);
 
     block->s_fs_info = info;
 
@@ -55,6 +56,15 @@ void fs_free_info(struct super_block *block) {
 
     if (!block->s_fs_info) {
         return;
+    }
+
+    vtfs_info *info = block->s_fs_info;
+
+    vtfs_node *root_dir = info->root_dir;
+
+    if (root_dir) {
+        node_dec_refcount(root_dir);
+        info->root_dir = NULL;
     }
 
     kfree(block->s_fs_info);
@@ -84,7 +94,7 @@ unsigned long fs_get_next_inode_no(struct super_block *super_block) {
     }
 
     LOG("get new inode_no");
-    unsigned long new_no = atomic64_fetch_inc(&info->next_inode_no);
+    unsigned long new_no = atomic_long_fetch_inc(&info->next_inode_no);
 
     return new_no;
 }
@@ -97,7 +107,7 @@ unsigned long fs_get_next_inode_no(struct super_block *super_block) {
  *
  * Return: error code or 0 if all good
  */
-int fs_init_directory(struct super_block *sb, vtfs_node *node) {
+int fs_init_directory(struct super_block *sb, vtfs_node **node) {
     return fs_init_new_node(sb, VTFS_FOLDER, node);
 }
 
@@ -108,27 +118,50 @@ int fs_init_directory(struct super_block *sb, vtfs_node *node) {
  *
  * Return: error code or 0 if all good
  */
-int fs_init_file(struct super_block *sb, vtfs_node *node) {
+int fs_init_file(struct super_block *sb, vtfs_node **node) {
     return fs_init_new_node(sb, VTFS_FILE, node);
 }
 
-int fs_init_new_node(struct super_block *sb, vtfs_node_type type, vtfs_node *node) {
+static int fs_init_new_node(struct super_block *sb, vtfs_node_type type, vtfs_node **node) {
     if (!sb) {
         ERR("filesystem got null pointer to super_block");
         return -EINVAL;
     }
+
     unsigned long id = fs_get_next_inode_no(sb);
 
+    return fs_init_new_node_with_id(id, type, node);
+}
+
+static int fs_init_new_node_with_id(unsigned long id, vtfs_node_type type, vtfs_node **node) {
     if (id == 0) {
         ERR("Couldn't initialized new vtfs_node because couldn't get new inode no");
         return -EINVAL;
     }
 
-    int result = node_init(&node, type, id);
+    int result = node_init(node, type, id);
 
     if (result < 0) {
         ERR("Couldn't initialized new node");
     }
 
     return result;
+}
+
+/**
+ * fs_init_root_directory - init root directory of filesystem
+ *
+ *
+ * Return: pointer to vtfs_node of root directory
+ */
+vtfs_node *fs_init_root_directory(void) {
+    vtfs_node *root_node = NULL;
+
+    int result = fs_init_new_node_with_id(1, VTFS_FOLDER, &root_node);
+
+    if (result < 0) {
+        return NULL;
+    }
+
+    return root_node;
 }
