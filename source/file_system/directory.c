@@ -1,4 +1,5 @@
 #include "directory.h"
+#include "asm-generic/errno-base.h"
 #include "node.h"
 
 #include <linux/gfp.h>
@@ -36,6 +37,11 @@ vtfs_dir directory_init(void) {
  * Return: 0 if all okay else error code
  */
 int directory_init_capacity(vtfs_dir *dir, size_t init_capacity) {
+    if (init_capacity == 0) {
+        ERR("init_capacity for directory must be greater then 0");
+        return -EINVAL;
+    }
+
     if (dir == NULL) {
         ERR("Couldn't init directory capacity because it was NULL");
         return -EINVAL;

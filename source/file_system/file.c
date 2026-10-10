@@ -32,6 +32,11 @@ vtfs_file file_init(void) {
  * Return: return code for memory alloc
  */
 int file_init_capacity(vtfs_file *file, size_t init_capacity) {
+    if (init_capacity == 0) {
+        ERR("init_capacity for file must be greater than 0");
+        return -EINVAL;
+    }
+
     if (!file) {
         ERR("file_init_capacity got null pointer to file");
         return -EINVAL;
