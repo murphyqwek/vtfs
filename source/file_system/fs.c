@@ -211,6 +211,6 @@ int fs_create_file(struct super_block *sb, vtfs_node *parent_dir, vtfs_node **ne
         return code;
     }
 
-    // Вот здесь мы должны очистить
+    LOG("fs_create_file created new file successfully");
     return 0;
 }

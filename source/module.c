@@ -1,7 +1,9 @@
-#include "asm-generic/errno-base.h"
 #include "file_system/directory.h"
+#include "file_system/file.h"
 #include "file_system/node.h"
 #include "linux/err.h"
+#include "linux/kern_levels.h"
+#include "linux/slab.h"
 #include "linux/stat.h"
 #include "linux/types.h"
 #include "vtfs.h"
@@ -35,6 +37,11 @@ struct file_system_type my_vtfs_type = {
 static const struct super_operations vtfs_super_ops = {
     .put_super = vtfs_put_super,
     .evict_inode = vtfs_evict_inode,
+};
+
+static const struct file_operations vtfs_file_fops = {
+    .owner = THIS_MODULE,
+    .llseek = generic_file_llseek,
 };
 
 static const struct inode_operations vtfs_dir_operations = {
@@ -94,7 +101,8 @@ int vtfs_fill_super(struct super_block *sb, void *data, int silent) {
 }
 
 void vtfs_kill_sb(struct super_block *sb) {
-    kill_litter_super(sb);
+    printk(KERN_INFO "VTFS starting unmounting...");
+    kill_anon_super(sb);
 
     printk(KERN_INFO "VTFS was unmounted");
 }
@@ -137,6 +145,9 @@ int vtfs_init_inode(struct inode *inode, const struct inode *dir, umode_t mode, 
     // TODO: привзяать функции evict и i_op и f_op
     if (S_ISDIR(inode->i_mode)) {
         inode->i_op = &vtfs_dir_operations;
+        inode->i_fop = &vtfs_file_fops;
+    } else {
+        inode->i_fop = &vtfs_file_fops;
     }
     return 0;
 }
@@ -203,7 +214,17 @@ int vtfs_create(struct mnt_idmap *idmap, struct inode *dir, struct dentry *dentr
     }
 
     vtfs_init_inode(inode, dir, mode, file_node, idmap);
-    d_instantiate(dentry, inode);
+
+    pr_info("VTFS: inode=%px mode=%o ino=%lu\n", inode, inode->i_mode, inode->i_ino);
+
+    pr_info("VTFS: dentry=%px parent=%px root=%px\n", dentry, dentry->d_parent, dir->i_sb->s_root);
+
+    WARN_ON(d_really_is_positive(dentry));
+    WARN_ON(S_ISDIR(inode->i_mode));
+    d_add(dentry, inode);
+
+    pr_info("VTFS: after instantiate: inode=%px d_inode=%px hashed=%d\n", inode, d_inode(dentry),
+            !d_unhashed(dentry));
 
     kfree(name);
 
@@ -214,6 +235,7 @@ int vtfs_create(struct mnt_idmap *idmap, struct inode *dir, struct dentry *dentr
 }
 
 static void vtfs_evict_inode(struct inode *inode) {
+    LOG("vtfs_evict_inode called: removing link to node");
     vtfs_node *node = inode->i_private;
 
     truncate_inode_pages_final(&inode->i_data);
@@ -227,6 +249,7 @@ static void vtfs_evict_inode(struct inode *inode) {
 }
 
 static void vtfs_put_super(struct super_block *sb) {
+    LOG("Starting of put_super: clearing vtfs nodes");
     fs_free_info(sb);
 }
 

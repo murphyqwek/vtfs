@@ -124,7 +124,6 @@ vtfs_node *directory_find(vtfs_node *node, const char *name, size_t name_len) {
     }
 
     if (!node_is_dir(node)) {
-        mutex_unlock(&node->mutex);
         return NULL;
     }
 
@@ -277,6 +276,8 @@ int directory_add_locked(vtfs_node *parent, vtfs_node *children, const char *nam
 
     if (existing) {
         node_dec_refcount(existing);
+        ERR("directory_add_locked didn't add file to the dir because it has already file with this "
+            "name");
         return -EEXIST;
     }
 
@@ -290,6 +291,7 @@ int directory_add_locked(vtfs_node *parent, vtfs_node *children, const char *nam
 
     // Проверяем, что мы можем ещё добавить один файл в директорию
     if (dir->length >= MAX_DIRECTORY_CAPACITY) {
+        kfree_const(dup_name);
         ERR("Couldn't add file to directory because it has max capacity");
         return -ENOSPC;
     }
@@ -297,6 +299,7 @@ int directory_add_locked(vtfs_node *parent, vtfs_node *children, const char *nam
     if (dir->length + 1 > dir->capacity) {
         int code = directory_grow(dir);
         if (code < 0) {
+            kfree_const(dup_name);
             return code;
         }
     }
