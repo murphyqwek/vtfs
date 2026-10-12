@@ -39,6 +39,7 @@ static const struct super_operations vtfs_super_ops = {
 
 static const struct inode_operations vtfs_dir_operations = {
     .lookup = vtfs_lookup,
+    .create = vtfs_create,
 };
 
 struct dentry *vtfs_mount(struct file_system_type *fs_type, int flags, const char *token,
