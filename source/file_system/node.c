@@ -115,3 +115,32 @@ int node_init(vtfs_node **node, vtfs_node_type type, unsigned long id) {
     *node = result;
     return 0;
 }
+
+/**
+ * node_is_file - check if vtfs_node has VTFS_FILE type
+ * @node: pointer to node
+ *
+ * Return: return false if node is null pointer or doesn't have VTFS_FILE type
+ */
+bool node_is_file(vtfs_node *node) {
+    if (!node) {
+        return false;
+    }
+
+    return node->type == VTFS_FILE;
+}
+
+/**
+ * node_is_dir - check if vtfs_node has VTFS_FOLDER type
+ * @node: pointer to vtfs_node
+ *
+ *
+ * Return: return false if node is null pointer or doesn't have VTFS_FOLDER type
+ */
+bool node_is_dir(vtfs_node *node) {
+    if (!node) {
+        return false;
+    }
+
+    return node->type == VTFS_FOLDER;
+}

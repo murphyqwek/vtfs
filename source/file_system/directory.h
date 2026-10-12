@@ -21,9 +21,10 @@ typedef struct vtfs_dir {
 } vtfs_dir;
 
 vtfs_dir directory_init(void);
-
 int directory_init_capacity(vtfs_dir *dir, size_t init_capacity);
-
 void directory_free(vtfs_dir *dir);
+
+vtfs_node *directory_find(vtfs_dir *dir);
+vtfs_node *directory_find_locked(vtfs_dir *dir);
 
 #endif

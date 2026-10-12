@@ -32,4 +32,7 @@ void node_dec_refcount(vtfs_node *node);
 
 int node_init(vtfs_node **node, vtfs_node_type type, unsigned long id);
 
+bool node_is_file(vtfs_node *node);
+bool node_is_dir(vtfs_node *node);
+
 #endif
