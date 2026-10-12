@@ -1,11 +1,13 @@
 #include "directory.h"
 #include "asm-generic/errno-base.h"
+#include "linux/mutex.h"
 #include "node.h"
 
 #include <linux/gfp.h>
 #include <linux/errno.h>
 #include <linux/slab.h>
 #include <linux/stddef.h>
+#include <linux/string.h>
 #include "../helpers.h"
 
 /**
@@ -99,4 +101,87 @@ void directory_free(vtfs_dir *dir) {
     dir->length = 0;
 
     LOG("directory was free");
+}
+
+/**
+ * directory_find - find node with current file name
+ * @node: pointer to directory node
+ * @name: file name
+ * @name_len: length of name
+ *
+ * This function locks node's mutex
+ * Capturing the node link
+ *
+ * Return: pointer to node with the name or NULL (if error or does not exist);
+ */
+vtfs_node *directory_find(vtfs_node *node, const char *name, size_t name_len) {
+    if (node == NULL) {
+        return NULL;
+    }
+
+    if (name == NULL) {
+        return NULL;
+    }
+
+    if (!node_is_dir(node)) {
+        mutex_unlock(&node->mutex);
+        return NULL;
+    }
+
+    mutex_lock(&node->mutex);
+
+    vtfs_node *finded_node = directory_find_locked(node, name, name_len);
+
+    mutex_unlock(&node->mutex);
+
+    return finded_node;
+}
+
+/**
+ * directory_find_locked - finds node with current file name in directory
+ * @node: pointer to directory node
+ * @name: file name
+ * @name_len: length of name
+ *
+ * This function requiers that dir_node mutex is locked
+ * Capturing the node link
+ *
+ * Return: pointer to node with the name or NULL (if error or does not exist);
+ */
+vtfs_node *directory_find_locked(vtfs_node *node, const char *name, size_t name_len) {
+    if (node == NULL) {
+        return NULL;
+    }
+
+    if (!node_is_dir(node)) {
+        return NULL;
+    }
+
+    if (name == NULL) {
+        return NULL;
+    }
+
+    vtfs_dir *dir = &node->directory;
+
+    if (dir->length == 0) {
+        return NULL;
+    }
+
+    for (size_t i = 0; i < dir->length; i++) {
+        vtfs_dir_entry *entry = &dir->entries[i];
+
+        if (strlen(entry->name) != name_len) {
+            continue;
+        }
+
+        if (memcmp(entry->name, name, name_len) == 0) {
+            vtfs_node *finded_node = entry->node;
+
+            node_inc_refcount(finded_node);
+
+            return finded_node;
+        }
+    }
+
+    return NULL;
 }

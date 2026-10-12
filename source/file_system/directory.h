@@ -24,7 +24,7 @@ vtfs_dir directory_init(void);
 int directory_init_capacity(vtfs_dir *dir, size_t init_capacity);
 void directory_free(vtfs_dir *dir);
 
-vtfs_node *directory_find(vtfs_dir *dir);
-vtfs_node *directory_find_locked(vtfs_dir *dir);
+vtfs_node *directory_find(vtfs_node *node, const char *name, size_t name_len);
+vtfs_node *directory_find_locked(vtfs_node *node, const char *name, size_t name_len);
 
 #endif
