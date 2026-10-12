@@ -1,4 +1,7 @@
 #include "directory.h"
+#include "asm-generic/errno-base.h"
+#include "linux/gfp_types.h"
+#include "linux/lockdep.h"
 #include "node.h"
 
 #include <linux/gfp.h>
@@ -29,46 +32,44 @@ vtfs_dir directory_init(void) {
 }
 
 /**
- * directory_init_capacity - inits an array of dir_entries
- * @dir: directory
- * @capacity: capacity should be less than MAX_DIRECTORY_CAPACITY
+ * directory_grow - increase directory capacity if it's possible
+ * @dir: pointer to directory
  *
- * You should use this function only on empty vtfs_dir
  *
- * Return: 0 if all okay else error code
+ * Return: error code or 0
  */
-int directory_init_capacity(vtfs_dir *dir, size_t init_capacity) {
-    if (init_capacity == 0) {
-        ERR("init_capacity for directory must be greater then 0");
-        return -EINVAL;
+int directory_grow(vtfs_dir *dir) {
+    size_t new_capacity;
+
+    if (dir->capacity >= MAX_DIRECTORY_CAPACITY) {
+        ERR("Couldn't grow directory capacity because it's reached it's max capacity");
+        return -ENOSPC;
     }
 
-    if (dir == NULL) {
-        ERR("Couldn't init directory capacity because it was NULL");
-        return -EINVAL;
+    if (dir->capacity == 0) {
+        new_capacity = 4;
+    } else if (dir->capacity > MAX_DIRECTORY_CAPACITY / 2) {
+        new_capacity = MAX_DIRECTORY_CAPACITY;
+    } else {
+        new_capacity = dir->capacity * 2;
     }
 
-    if (init_capacity > MAX_DIRECTORY_CAPACITY) {
-        WRN("Couldn't init directory capacity because capacity was too big");
-        return -EINVAL;
+    if (new_capacity > MAX_DIRECTORY_CAPACITY) {
+        new_capacity = MAX_DIRECTORY_CAPACITY;
     }
 
-    if (dir->entries || dir->capacity || dir->length) {
-        ERR("directory_init_capacity should be used only for recently initialized direcotries");
-        return -EINVAL;
-    }
+    vtfs_dir_entry *new_entries =
+        krealloc_array(dir->entries, new_capacity, sizeof(*dir->entries), GFP_KERNEL);
 
-    vtfs_dir_entry *entries = kzalloc(init_capacity * sizeof(vtfs_dir_entry), GFP_KERNEL);
-
-    if (!entries) {
-        ERR("Couldn't allocate memory for directory");
+    if (!new_entries) {
+        ERR("Couldn't grow directory capacity because Couldn't allocate new memory");
         return -ENOMEM;
     }
 
-    dir->entries = entries;
-    dir->capacity = init_capacity;
+    dir->entries = new_entries;
+    dir->capacity = new_capacity;
 
-    LOG("directory capacity was initialized");
+    LOG("directory capacity was successfully increased");
     return 0;
 }
 
@@ -88,7 +89,7 @@ void directory_free(vtfs_dir *dir) {
     // Сначала мы отпускаем ссылки на все дочерние файлы
     for (size_t i = 0; i < dir->length; i++) {
         // Освобождаем имя файла и отпускаем ссылку на файл
-        kfree(dir->entries[i].name);
+        kfree_const(dir->entries[i].name);
         node_dec_refcount(dir->entries[i].node);
     }
 
@@ -152,6 +153,8 @@ vtfs_node *directory_find_locked(vtfs_node *node, const char *name, size_t name_
         return NULL;
     }
 
+    lockdep_assert(&node->mutex);
+
     if (!node_is_dir(node)) {
         return NULL;
     }
@@ -183,4 +186,130 @@ vtfs_node *directory_find_locked(vtfs_node *node, const char *name, size_t name_
     }
 
     return NULL;
+}
+
+/**
+ * directory_add - add file to directory
+ * @parent: pointer to parent node
+ * @children: pointer to children node
+ * @name: pointer to name
+ *
+ * Return: error code or 0
+ */
+int directory_add(vtfs_node *parent, vtfs_node *children, const char *name) {
+    if (!parent) {
+        ERR("directory_add got null pointer to directory");
+        return -EINVAL;
+    }
+
+    if (!node_is_dir(parent)) {
+        ERR("directory_add got file as directory");
+        return -EINVAL;
+    }
+
+    if (!children) {
+        ERR("directory_add got null pointer to children");
+        return -EINVAL;
+    }
+
+    if (!name) {
+        ERR("directory_add got null pointer to name");
+        return -EINVAL;
+    }
+
+    if (strlen(name) == 0) {
+        ERR("directory_add got zero len name");
+        return -EINVAL;
+    }
+
+    mutex_lock(&parent->mutex);
+
+    int code = directory_add_locked(parent, children, name);
+
+    mutex_unlock(&parent->mutex);
+
+    return code;
+}
+
+/**
+ * directory_add_locked - add file to directory
+ * @parent: pointer to parent node
+ * @children: pointer to children node
+ * @name: pointer to name
+ *
+ * Expect that parent mutex was captured
+ *
+ * Return: error code or 0
+ */
+int directory_add_locked(vtfs_node *parent, vtfs_node *children, const char *name) {
+    if (!parent) {
+        ERR("directory_add_locked got null pointer to directory");
+        return -EINVAL;
+    }
+
+    lockdep_assert(&parent->mutex);
+
+    if (!node_is_dir(parent)) {
+        ERR("directory_add_locked got file as directory");
+        return -EINVAL;
+    }
+
+    if (!children) {
+        ERR("directory_add_locked got null pointer to children");
+        return -EINVAL;
+    }
+
+    // TODO: Добавить проверкку на /, . и ..
+    if (!name) {
+        ERR("directory_add_locked got null pointer to name");
+        return -EINVAL;
+    }
+
+    if (strlen(name) == 0) {
+        ERR("directory_add_locked got zero len name");
+        return -EINVAL;
+    }
+
+    vtfs_dir *dir = &parent->directory;
+
+    // Проверяем, что файла в директории с таким именем нет
+    vtfs_node *existing = directory_find_locked(parent, name, strlen(name));
+
+    if (existing) {
+        node_dec_refcount(existing);
+        return -EEXIST;
+    }
+
+    // Копируем имя
+    const char *dup_name = kstrdup_const(name, GFP_KERNEL);
+
+    if (!dup_name) {
+        ERR("Couldn't allocate memory for dup_name in directory_add_locked");
+        return -ENOMEM;
+    }
+
+    // Проверяем, что мы можем ещё добавить один файл в директорию
+    if (dir->length >= MAX_DIRECTORY_CAPACITY) {
+        ERR("Couldn't add file to directory because it has max capacity");
+        return -ENOSPC;
+    }
+
+    if (dir->length + 1 > dir->capacity) {
+        int code = directory_grow(dir);
+        if (code < 0) {
+            return code;
+        }
+    }
+
+    vtfs_dir_entry new_entry;
+
+    new_entry.name = dup_name;
+    new_entry.node = children;
+
+    node_inc_refcount(children);
+
+    dir->entries[dir->length] = new_entry;
+    dir->length++;
+
+    return 0;
 }

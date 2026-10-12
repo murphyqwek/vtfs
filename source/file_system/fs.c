@@ -4,6 +4,7 @@
 #include <linux/slab.h>
 #include <linux/fs.h>
 #include "../helpers.h"
+#include "asm-generic/errno-base.h"
 #include "directory.h"
 #include "linux/stddef.h"
 #include "node.h"
@@ -164,4 +165,52 @@ vtfs_node *fs_init_root_directory(void) {
     }
 
     return root_node;
+}
+
+/**
+ * fs_create_file - create new file and add it to directory
+ * @sb: pointer to super_block
+ * @parent_dir: pointer to parent directory
+ * @new_file: pointer to created new file (NULL on failure)
+ * @name: pointer to file's name
+ *
+ *
+ * Return: error code or 0
+ */
+int fs_create_file(struct super_block *sb, vtfs_node *parent_dir, vtfs_node **new_file,
+                   const char *name) {
+    if (!sb) {
+        ERR("fs_create_file got null pointer to super_block");
+        return -EINVAL;
+    }
+
+    if (!parent_dir) {
+        ERR("fs_create_file got null pointer to parent_dir");
+        return -EINVAL;
+    }
+
+    if (!name) {
+        ERR("fs_create_file got null pointer to name");
+        return -EINVAL;
+    }
+
+    int code = fs_init_file(sb, new_file);
+
+    if (code < 0) {
+        ERR("fs_create_file couldn't create new file");
+        return code;
+    }
+
+    code = directory_add(parent_dir, *new_file, name);
+
+    if (code < 0) {
+        node_dec_refcount(*new_file);
+        *new_file = NULL;
+
+        ERR("fs_create_file couldn't add new file to directory");
+        return code;
+    }
+
+    // Вот здесь мы должны очистить
+    return 0;
 }

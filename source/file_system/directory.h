@@ -3,7 +3,8 @@
 
 #include <linux/types.h>
 
-#define MAX_DIRECTORY_CAPACITY 25
+#define MAX_DIRECTORY_CAPACITY 32
+#define STANDART_DIRECTORY_CAPACITY 32
 
 typedef struct vtfs_node vtfs_node;
 
@@ -21,10 +22,14 @@ typedef struct vtfs_dir {
 } vtfs_dir;
 
 vtfs_dir directory_init(void);
-int directory_init_capacity(vtfs_dir *dir, size_t init_capacity);
 void directory_free(vtfs_dir *dir);
+
+int directory_grow(vtfs_dir *dir);
 
 vtfs_node *directory_find(vtfs_node *node, const char *name, size_t name_len);
 vtfs_node *directory_find_locked(vtfs_node *node, const char *name, size_t name_len);
+
+int directory_add(vtfs_node *parent, vtfs_node *children, const char *name);
+int directory_add_locked(vtfs_node *parent, vtfs_node *children, const char *name);
 
 #endif

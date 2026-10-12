@@ -19,4 +19,7 @@ int fs_init_file(struct super_block *sb, vtfs_node **node);
 
 vtfs_node *fs_init_root_directory(void);
 
+int fs_create_file(struct super_block *sb, vtfs_node *parent_dir, vtfs_node **new_file,
+                   const char *name);
+
 #endif

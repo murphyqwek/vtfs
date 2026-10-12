@@ -1,6 +1,9 @@
+#include "asm-generic/errno-base.h"
 #include "file_system/directory.h"
 #include "file_system/node.h"
 #include "linux/err.h"
+#include "linux/stat.h"
+#include "linux/types.h"
 #include "vtfs.h"
 
 #include <linux/fs.h>
@@ -32,6 +35,10 @@ struct file_system_type my_vtfs_type = {
 static const struct super_operations vtfs_super_ops = {
     .put_super = vtfs_put_super,
     .evict_inode = vtfs_evict_inode,
+};
+
+static const struct inode_operations vtfs_dir_operations = {
+    .lookup = vtfs_lookup,
 };
 
 struct dentry *vtfs_mount(struct file_system_type *fs_type, int flags, const char *token,
@@ -103,15 +110,106 @@ struct inode *vtfs_get_inode(struct super_block *sb, const struct inode *dir, um
         return NULL;
     }
 
-    // Систему прав делть не будем, поэтому всегда будем ставить 777
-    inode_init_owner(&nop_mnt_idmap, inode, dir, mode | 0777);
+    vtfs_init_inode(inode, dir, mode, node, &nop_mnt_idmap);
+    return inode;
+}
+
+int vtfs_init_inode(struct inode *inode, const struct inode *dir, umode_t mode, vtfs_node *node,
+                    struct mnt_idmap *idmap) {
+    if (!node) {
+        ERR("vtfs_init_inode got null pointer to node");
+        return -EINVAL;
+    }
+
+    if (!inode) {
+        ERR("vtfs_init_inode got null pointer to inode");
+        return -EINVAL;
+    }
+
+    inode_init_owner(idmap, inode, dir, mode | 0777);
 
     node_inc_refcount(node);
+
     inode->i_private = node;
     inode->i_ino = node->id;
 
     // TODO: привзяать функции evict и i_op и f_op
-    return inode;
+    if (S_ISDIR(inode->i_mode)) {
+        inode->i_op = &vtfs_dir_operations;
+    }
+    return 0;
+}
+
+struct dentry *vtfs_lookup(struct inode *inode, struct dentry *dentry, unsigned int flags) {
+    vtfs_node *dir = inode->i_private;
+
+    vtfs_node *finded_node = directory_find(dir, dentry->d_name.name, dentry->d_name.len);
+
+    if (!finded_node) {
+        d_add(dentry, NULL);
+        return NULL;
+    }
+
+    umode_t mode = finded_node->type == VTFS_FILE ? S_IFREG : S_IFDIR;
+
+    struct inode *finded_inode = vtfs_get_inode(inode->i_sb, inode, mode, finded_node);
+
+    node_dec_refcount(finded_node);
+
+    if (!finded_inode) {
+        return ERR_PTR(-ENOMEM);
+    }
+
+    d_add(dentry, finded_inode);
+    return NULL;
+}
+
+int vtfs_create(struct mnt_idmap *idmap, struct inode *dir, struct dentry *dentry, umode_t mode,
+                bool b) {
+    const struct qstr *qname = &dentry->d_name;
+
+    char *name = kmemdup_nul(qname->name, qname->len, GFP_KERNEL);
+
+    if (!name) {
+        return -ENOMEM;
+    }
+
+    struct inode *inode = new_inode(dir->i_sb);
+
+    if (!inode) {
+        kfree(name);
+        ERR("vtfs_create couldn't create new inode");
+        return -ENOMEM;
+    }
+
+    vtfs_node *dir_node = dir->i_private;
+
+    if (!dir_node) {
+        ERR("vtfs_create got null pointer to vtfs_node in dir");
+        iput(inode);
+        kfree(name);
+        return -EINVAL;
+    }
+
+    vtfs_node *file_node = NULL;
+    int code = fs_create_file(dir->i_sb, dir_node, &file_node, name);
+
+    if (code < 0) {
+        iput(inode);
+        kfree(name);
+
+        return code;
+    }
+
+    vtfs_init_inode(inode, dir, mode, file_node, idmap);
+    d_instantiate(dentry, inode);
+
+    kfree(name);
+
+    node_dec_refcount(file_node);
+
+    LOG("vtfs_create created new file");
+    return 0;
 }
 
 static void vtfs_evict_inode(struct inode *inode) {
