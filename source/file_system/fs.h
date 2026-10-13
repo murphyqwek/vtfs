@@ -4,6 +4,7 @@
 #include <linux/fs.h>
 #include "directory.h"
 #include "node.h"
+#include <linux/dirent.h>
 
 typedef struct vtfs_info {
     vtfs_node *root_dir;
@@ -22,4 +23,5 @@ vtfs_node *fs_init_root_directory(void);
 int fs_create_file(struct super_block *sb, vtfs_node *parent_dir, vtfs_node **new_file,
                    const char *name);
 
+int fs_iterate(struct file *file, struct dir_context *ctx);
 #endif

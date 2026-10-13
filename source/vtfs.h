@@ -27,4 +27,6 @@ struct dentry *vtfs_lookup(struct inode *inode, struct dentry *dentry, unsigned 
 int vtfs_create(struct mnt_idmap *idmap, struct inode *dir, struct dentry *dentry, umode_t mode,
                 bool b);
 
+int vtfs_iterate(struct file *, struct dir_context *);
+
 #endif

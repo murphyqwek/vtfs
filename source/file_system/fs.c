@@ -6,7 +6,10 @@
 #include "../helpers.h"
 #include "asm-generic/errno-base.h"
 #include "directory.h"
+#include "linux/fs_types.h"
+#include "linux/mutex.h"
 #include "linux/stddef.h"
+#include "linux/types.h"
 #include "node.h"
 
 static int fs_init_new_node(struct super_block *sb, vtfs_node_type type, vtfs_node **node);
@@ -213,4 +216,62 @@ int fs_create_file(struct super_block *sb, vtfs_node *parent_dir, vtfs_node **ne
 
     LOG("fs_create_file created new file successfully");
     return 0;
+}
+
+int fs_iterate(struct file *file, struct dir_context *ctx) {
+    struct inode *inode = file_inode(file);
+
+    vtfs_node *node = inode->i_private;
+
+    if (!node) {
+        ERR("fs_iterate got null pointer to vtfs_node");
+        return -EIO;
+    }
+
+    if (!node_is_dir(node)) {
+        ERR("fs_iterate got file as directory");
+        return -ENOTDIR;
+    }
+
+    vtfs_dir *directory = &node->directory;
+
+    if (!dir_emit_dots(file, ctx)) {
+        return 0;
+    }
+
+    mutex_lock(&node->mutex);
+    node_inc_refcount(node);
+
+    int code = 0;
+
+    for (loff_t i = ctx->pos - 2; i < (loff_t)directory->length; i++) {
+        vtfs_dir_entry *entry = &directory->entries[i];
+
+        if (!entry->node) {
+            ERR("during fs_iterate directory entry got null pointer to node");
+            code = -EIO;
+            break;
+        }
+
+        if (!entry->name) {
+            ERR("during fs_iterate directory entry got null pointer to name");
+            code = -EIO;
+            break;
+        }
+
+        unsigned int type = node_is_file(node) ? DT_REG : DT_DIR;
+
+        if (!dir_emit(ctx, entry->name, strlen(entry->name), entry->node->id, type)) {
+            code = 0;
+            break;
+        }
+
+        ctx->pos++;
+    }
+
+    mutex_unlock(&node->mutex);
+
+    node_dec_refcount(node);
+
+    return code;
 }

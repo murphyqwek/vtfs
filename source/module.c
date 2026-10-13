@@ -44,6 +44,12 @@ static const struct file_operations vtfs_file_fops = {
     .llseek = generic_file_llseek,
 };
 
+static const struct file_operations vtfs_dir_fops = {
+    .owner = THIS_MODULE,
+    .llseek = generic_file_llseek,
+    .iterate_shared = vtfs_iterate,
+};
+
 static const struct inode_operations vtfs_dir_operations = {
     .lookup = vtfs_lookup,
     .create = vtfs_create,
@@ -103,7 +109,6 @@ int vtfs_fill_super(struct super_block *sb, void *data, int silent) {
 void vtfs_kill_sb(struct super_block *sb) {
     printk(KERN_INFO "VTFS starting unmounting...");
     kill_anon_super(sb);
-
     printk(KERN_INFO "VTFS was unmounted");
 }
 
@@ -142,10 +147,9 @@ int vtfs_init_inode(struct inode *inode, const struct inode *dir, umode_t mode, 
     inode->i_private = node;
     inode->i_ino = node->id;
 
-    // TODO: привзяать функции evict и i_op и f_op
     if (S_ISDIR(inode->i_mode)) {
         inode->i_op = &vtfs_dir_operations;
-        inode->i_fop = &vtfs_file_fops;
+        inode->i_fop = &vtfs_dir_fops;
     } else {
         inode->i_fop = &vtfs_file_fops;
     }
@@ -215,16 +219,7 @@ int vtfs_create(struct mnt_idmap *idmap, struct inode *dir, struct dentry *dentr
 
     vtfs_init_inode(inode, dir, mode, file_node, idmap);
 
-    pr_info("VTFS: inode=%px mode=%o ino=%lu\n", inode, inode->i_mode, inode->i_ino);
-
-    pr_info("VTFS: dentry=%px parent=%px root=%px\n", dentry, dentry->d_parent, dir->i_sb->s_root);
-
-    WARN_ON(d_really_is_positive(dentry));
-    WARN_ON(S_ISDIR(inode->i_mode));
     d_add(dentry, inode);
-
-    pr_info("VTFS: after instantiate: inode=%px d_inode=%px hashed=%d\n", inode, d_inode(dentry),
-            !d_unhashed(dentry));
 
     kfree(name);
 
@@ -232,6 +227,10 @@ int vtfs_create(struct mnt_idmap *idmap, struct inode *dir, struct dentry *dentr
 
     LOG("vtfs_create created new file");
     return 0;
+}
+
+int vtfs_iterate(struct file *file, struct dir_context *ctx) {
+    return fs_iterate(file, ctx);
 }
 
 static void vtfs_evict_inode(struct inode *inode) {
