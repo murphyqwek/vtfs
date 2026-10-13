@@ -218,6 +218,14 @@ int fs_create_file(struct super_block *sb, vtfs_node *parent_dir, vtfs_node **ne
     return 0;
 }
 
+/**
+ * fs_iterate - terate function for ls
+ * @fil: pointer to struct file
+ * @ctx: pointer to dir_context
+ *
+ *
+ * Return: 0 or error code
+ */
 int fs_iterate(struct file *file, struct dir_context *ctx) {
     struct inode *inode = file_inode(file);
 

@@ -153,6 +153,8 @@ int vtfs_init_inode(struct inode *inode, const struct inode *dir, umode_t mode, 
     } else {
         inode->i_fop = &vtfs_file_fops;
     }
+
+    simple_inode_init_ts(inode);
     return 0;
 }
 
@@ -224,6 +226,8 @@ int vtfs_create(struct mnt_idmap *idmap, struct inode *dir, struct dentry *dentr
     kfree(name);
 
     node_dec_refcount(file_node);
+
+    inode_set_mtime_to_ts(dir, inode_set_ctime_current(dir));
 
     LOG("vtfs_create created new file");
     return 0;
