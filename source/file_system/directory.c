@@ -316,3 +316,69 @@ int directory_add_locked(vtfs_node *parent, vtfs_node *children, const char *nam
 
     return 0;
 }
+
+/**
+ * directory_get_file_id - returns id of a file with given name
+ * @dir: pointer to vtfs_dir
+ * @name: pointer to file name
+ *
+ * Expect that dir node was captured
+ *
+ * Return: id of a file or error code (-1 if didn't find)
+ */
+int directory_get_file_id_locked(vtfs_dir *dir, const char *name) {
+    if (!dir) {
+        return -EINVAL;
+    }
+
+    for (int i = 0; i < dir->length; i++) {
+        vtfs_dir_entry *entry = &dir->entries[i];
+        if (strcmp(name, entry->name) == 0) {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+/**
+ * directory_unlink_file_locked - unlink file from directory by id
+ * @dir: pointer to vtfs_dir
+ * @id:  index of file in vtfs_dir entries
+ *
+ * Expect that dir was captured
+ * Calls node_dec_refcount!!!
+ * Decriment dir len
+ *
+ * Return: 0 if all good or -EINVAL
+ */
+int directory_unlink_file_locked(vtfs_dir *dir, int id) {
+    if (!dir) {
+        ERR("directory_unlink_file_locked got null pointer to directory");
+        return -EINVAL;
+    }
+
+    if (id < 0) {
+        ERR("directory_unlink_file_locked got negative id");
+        return -EINVAL;
+    }
+
+    if (id >= dir->length) {
+        ERR("directory_unlink_file_locked got id that larger that dir len");
+        return -EINVAL;
+    }
+
+    // Освобождаем ссылку на файл
+    node_dec_refcount(dir->entries[id].node);
+
+    // Освобождаем имя
+    kfree_const(dir->entries[id].name);
+
+    // Перемещаем файл с конца чтобы не морочиться
+    dir->entries[id] = dir->entries[dir->length - 1];
+    dir->entries[dir->length - 1] = (vtfs_dir_entry){0};
+
+    dir->length--;
+
+    return 0;
+}

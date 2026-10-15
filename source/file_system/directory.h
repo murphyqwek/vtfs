@@ -32,4 +32,8 @@ vtfs_node *directory_find_locked(vtfs_node *node, const char *name, size_t name_
 int directory_add(vtfs_node *parent, vtfs_node *children, const char *name);
 int directory_add_locked(vtfs_node *parent, vtfs_node *children, const char *name);
 
+int directory_get_file_id_locked(vtfs_dir *dir, const char *name);
+
+int directory_unlink_file_locked(vtfs_dir *dir, int id);
+
 #endif

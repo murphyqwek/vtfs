@@ -53,6 +53,7 @@ static const struct file_operations vtfs_dir_fops = {
 static const struct inode_operations vtfs_dir_operations = {
     .lookup = vtfs_lookup,
     .create = vtfs_create,
+    .unlink = vtfs_unlink,
 };
 
 struct dentry *vtfs_mount(struct file_system_type *fs_type, int flags, const char *token,
@@ -234,11 +235,41 @@ int vtfs_create(struct mnt_idmap *idmap, struct inode *dir, struct dentry *dentr
 }
 
 int vtfs_iterate(struct file *file, struct dir_context *ctx) {
-    return fs_iterate(file, ctx);
+    LOG("vtfs_iterate called");
+
+    int code = fs_iterate(file, ctx);
+
+    if (code < 0) {
+        ERR("vtfs_iterate got an error");
+    }
+
+    return code;
+}
+
+int vtfs_unlink(struct inode *parent, struct dentry *child) {
+    LOG("vtfs_unlink called");
+
+    int code = fs_unlink(parent, child);
+
+    if (code < 0) {
+        ERR("vtfs_unlink didn't successfuly unlink file");
+        return code;
+    }
+
+    struct inode *inode = d_inode(child);
+
+    drop_nlink(inode);
+    inode_set_ctime_current(inode);
+
+    inode_set_mtime_to_ts(parent, inode_set_ctime_current(parent));
+
+    LOG("vtfs_unlink successfuly unlinked a file");
+
+    return 0;
 }
 
 static void vtfs_evict_inode(struct inode *inode) {
-    LOG("vtfs_evict_inode called: removing link to node");
+    LOG("vtfs_evict_inode removing link to node");
     vtfs_node *node = inode->i_private;
 
     truncate_inode_pages_final(&inode->i_data);

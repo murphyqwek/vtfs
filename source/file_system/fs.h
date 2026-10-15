@@ -3,6 +3,7 @@
 
 #include <linux/fs.h>
 #include "directory.h"
+#include "linux/dcache.h"
 #include "node.h"
 #include <linux/dirent.h>
 
@@ -10,6 +11,12 @@ typedef struct vtfs_info {
     vtfs_node *root_dir;
     atomic_long_t next_inode_no;
 } vtfs_info;
+
+typedef struct vtfs_server_info {
+    const char *server_ip;
+    const char *server_port;
+    const char *login;
+} vtfs_server_info;
 
 int fs_init_info(struct super_block *block);
 unsigned long fs_get_next_inode_no(struct super_block *super_block);
@@ -24,4 +31,7 @@ int fs_create_file(struct super_block *sb, vtfs_node *parent_dir, vtfs_node **ne
                    const char *name);
 
 int fs_iterate(struct file *file, struct dir_context *ctx);
+
+int fs_unlink(struct inode *parent_dir, struct dentry *child);
+
 #endif

@@ -4,6 +4,7 @@
 #include <linux/fs.h>
 #include "file_system/directory.h"
 #include "file_system/node.h"
+#include "linux/dcache.h"
 #include "linux/types.h"
 
 struct dentry *vtfs_mount(struct file_system_type *fs_type, int flags, const char *token,
@@ -28,5 +29,7 @@ int vtfs_create(struct mnt_idmap *idmap, struct inode *dir, struct dentry *dentr
                 bool b);
 
 int vtfs_iterate(struct file *, struct dir_context *);
+
+int vtfs_unlink(struct inode *parent, struct dentry *child);
 
 #endif

@@ -15,6 +15,15 @@
 static int fs_init_new_node(struct super_block *sb, vtfs_node_type type, vtfs_node **node);
 static int fs_init_new_node_with_id(unsigned long id, vtfs_node_type type, vtfs_node **node);
 
+static void release_node_mutex_dec_refcount(vtfs_node *node) {
+    if (!node) {
+        return;
+    }
+
+    mutex_unlock(&node->mutex);
+    node_dec_refcount(node);
+}
+
 /**
  * fs_init_info - inits a new filesystem information
  * @block: pointer to superblock
@@ -279,6 +288,66 @@ int fs_iterate(struct file *file, struct dir_context *ctx) {
 
     mutex_unlock(&node->mutex);
 
+    node_dec_refcount(node);
+
+    return code;
+}
+
+/**
+ * fs_unlink - unlink file from directory
+ * @parent_dir: pointer to dir inode
+ * @child: pointer to unlinking file dentry
+ *
+ *
+ * Return: 0 or error code
+ */
+int fs_unlink(struct inode *parent_dir, struct dentry *child) {
+    vtfs_node *node = parent_dir->i_private;
+
+    if (!node) {
+        ERR("fs_unlink got null pointer to directory node");
+        return -EIO;
+    }
+
+    if (!node_is_dir(node)) {
+        ERR("fs_unlink got file as directory");
+        return -EIO;
+    }
+
+    vtfs_dir *dir = &node->directory;
+
+    const struct qstr *qstr = &child->d_name;
+
+    char *name = kmemdup_nul(qstr->name, qstr->len, GFP_KERNEL);
+
+    if (!name) {
+        ERR("fs_unlink couldn't allocate memory for name");
+        return -ENOMEM;
+    }
+
+    mutex_lock(&node->mutex);
+    node_inc_refcount(node);
+
+    int id = directory_get_file_id_locked(dir, name);
+
+    if (id < 0) {
+        ERR("fs_unlink didn't find a unlinkng fiile in directory");
+
+        kfree(name);
+        release_node_mutex_dec_refcount(node);
+
+        return -ENOENT;
+    }
+
+    int code = directory_unlink_file_locked(dir, id);
+
+    if (code < 0) {
+        ERR("fs_unlink got unexpected error when calling directory_unlink_file_locked");
+    }
+
+    kfree(name);
+
+    mutex_unlock(&node->mutex);
     node_dec_refcount(node);
 
     return code;
