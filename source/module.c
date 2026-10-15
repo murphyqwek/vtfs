@@ -1,300 +1,177 @@
-#include "file_system/directory.h"
-#include "file_system/file.h"
-#include "file_system/node.h"
-#include "linux/err.h"
-#include "linux/kern_levels.h"
-#include "linux/slab.h"
-#include "linux/stat.h"
-#include "linux/types.h"
-#include "vtfs.h"
-
-#include <linux/fs.h>
-#include <linux/init.h>
 #include <linux/module.h>
-#include <linux/printk.h>
+#include <linux/init.h>
+#include <linux/fs.h>
+#include <linux/mount.h>
+#include <linux/slab.h>
+#include <linux/err.h>
 #include <linux/errno.h>
-#include <linux/stddef.h>
-#include <linux/mm.h>
+#include <linux/string.h>
+#include <linux/kstrtox.h>
 
-#include "linux/dcache.h"
-#include "linux/mnt_idmapping.h"
-#include "linux/sched.h"
-
-#include "helpers.h"
-
+#include "server/server.h"
+#include "server/server_info.h"
+#include "vtfs.h"
 #include "file_system/fs.h"
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Arseny Starikov P3313");
-MODULE_DESCRIPTION("A simple FS kernel module");
+MODULE_DESCRIPTION("VTFS network filesystem");
+
+#define VTFS_MAX_SERVER_LEN 64
+#define VTFS_MAX_LOGIN_LEN 64
+
+struct vtfs_mount_options {
+    char server[VTFS_MAX_SERVER_LEN];
+    u16 port;
+    char login[VTFS_MAX_LOGIN_LEN];
+};
 
 static void vtfs_put_super(struct super_block *sb);
-static void vtfs_evict_inode(struct inode *inode);
-
-struct file_system_type my_vtfs_type = {
-    .name = "vtfs", .mount = vtfs_mount, .kill_sb = vtfs_kill_sb};
 
 static const struct super_operations vtfs_super_ops = {
     .put_super = vtfs_put_super,
-    .evict_inode = vtfs_evict_inode,
 };
 
-static const struct file_operations vtfs_file_fops = {
-    .owner = THIS_MODULE,
-    .llseek = generic_file_llseek,
-};
+static int vtfs_parse_options(void *data, struct vtfs_mount_options *opts) {
+    char *options, *cursor, *token;
+    bool has_server = false;
+    bool has_port = false;
+    bool has_login = false;
+    int ret = 0;
 
-static const struct file_operations vtfs_dir_fops = {
-    .owner = THIS_MODULE,
-    .llseek = generic_file_llseek,
-    .iterate_shared = vtfs_iterate,
-};
+    if (!data)
+        return -EINVAL;
 
-static const struct inode_operations vtfs_dir_operations = {
-    .lookup = vtfs_lookup,
-    .create = vtfs_create,
-    .unlink = vtfs_unlink,
-};
+    memset(opts, 0, sizeof(*opts));
 
-struct dentry *vtfs_mount(struct file_system_type *fs_type, int flags, const char *token,
-                          void *data) {
-    struct dentry *ret = mount_nodev(fs_type, flags, data, vtfs_fill_super);
-    if (IS_ERR(ret)) {
-        printk(KERN_ERR "Can't mount file system");
-    } else {
-        printk(KERN_INFO "Mounted successfuly");
+    options = kstrdup(data, GFP_KERNEL);
+    if (!options)
+        return -ENOMEM;
+
+    cursor = options;
+
+    while ((token = strsep(&cursor, ",")) != NULL) {
+        if (!strncmp(token, "server=", 7)) {
+            if (has_server || !token[7] ||
+                strscpy(opts->server, token + 7, sizeof(opts->server)) < 0) {
+                ret = -EINVAL;
+                kfree(options);
+                return ret;
+            }
+            has_server = true;
+
+        } else if (!strncmp(token, "port=", 5)) {
+            if (has_port || kstrtou16(token + 5, 10, &opts->port) || opts->port == 0) {
+                ret = -EINVAL;
+                kfree(options);
+                return ret;
+            }
+            has_port = true;
+
+        } else if (!strncmp(token, "login=", 6)) {
+            if (has_login || !token[6] ||
+                strscpy(opts->login, token + 6, sizeof(opts->login)) < 0) {
+                ret = -EINVAL;
+                kfree(options);
+                return ret;
+            }
+            has_login = true;
+
+        } else {
+            ret = -EINVAL;
+            kfree(options);
+            return ret;
+        }
     }
 
+    if (!has_server || !has_port || !has_login) {
+        ret = -EINVAL;
+    }
+
+    kfree(options);
     return ret;
 }
 
-int vtfs_fill_super(struct super_block *sb, void *data, int silent) {
+static int vtfs_fill_super(struct super_block *sb, void *data, int silent) {
+    struct vtfs_mount_options opts;
+    struct inode *root_inode;
+
+    int ret = vtfs_parse_options(data, &opts);
+    if (ret < 0) {
+        return ret;
+    }
+    pr_info("VTFS: server=%s port=%u login=%s\n", opts.server, opts.port, opts.login);
+
     sb->s_op = &vtfs_super_ops;
 
-    int err = fs_init_info(sb);
-    if (err) {
-        return err;
-    }
-
-    vtfs_node *root_node = fs_init_root_directory();
-    if (!root_node) {
-        err = -ENOMEM;
-        fs_free_info(sb);
-        return err;
-    }
-
-    struct inode *inode = vtfs_get_inode(sb, NULL, S_IFDIR, root_node);
-    if (!inode) {
-        err = -ENOMEM;
-        node_dec_refcount(root_node);
-        fs_free_info(sb);
-        return err;
-    }
-
-    set_nlink(inode, 2);
-
-    sb->s_root = d_make_root(inode);
-    if (!sb->s_root) {
-        err = -ENOMEM;
-        node_dec_refcount(root_node);
-        fs_free_info(sb);
-        return err;
+    ret = fs_init_info(sb, opts.server, opts.port, opts.login);
+    if (ret < 0) {
+        return ret;
     }
 
     vtfs_info *info = sb->s_fs_info;
-    info->root_dir = root_node;
 
+    vtfs_server_inode inode;
+
+    ret = fs_mount(info->server_info, &inode);
+
+    if (ret < 0) {
+        fs_free_info(sb);
+        return ret;
+    }
+
+    root_inode = new_inode(sb);
+    if (!root_inode) {
+        ret = -ENOMEM;
+        fs_free_info(sb);
+        return ret;
+    }
+
+    root_inode->i_ino = inode.inode_id;
+    root_inode->i_mode = S_IFDIR | 0755;
+    set_nlink(root_inode, inode.nlink);
+    simple_inode_init_ts(root_inode);
+
+    sb->s_root = d_make_root(root_inode);
+    if (!sb->s_root) {
+        ret = -ENOMEM;
+        fs_free_info(sb);
+        return ret;
+    }
+
+    pr_info("VTFS: filesystem mounted\n");
     return 0;
 }
 
-void vtfs_kill_sb(struct super_block *sb) {
-    printk(KERN_INFO "VTFS starting unmounting...");
+static struct dentry *vtfs_mount(struct file_system_type *fs_type, int flags, const char *dev_name,
+                                 void *data) {
+    return mount_nodev(fs_type, flags, data, vtfs_fill_super);
+}
+
+static void vtfs_kill_sb(struct super_block *sb) {
     kill_anon_super(sb);
-    printk(KERN_INFO "VTFS was unmounted");
-}
-
-struct inode *vtfs_get_inode(struct super_block *sb, const struct inode *dir, umode_t mode,
-                             vtfs_node *node) {
-    if (!node) {
-        return NULL;
-    }
-
-    struct inode *inode = new_inode(sb);
-
-    if (!inode) {
-        return NULL;
-    }
-
-    vtfs_init_inode(inode, dir, mode, node, &nop_mnt_idmap);
-    return inode;
-}
-
-int vtfs_init_inode(struct inode *inode, const struct inode *dir, umode_t mode, vtfs_node *node,
-                    struct mnt_idmap *idmap) {
-    if (!node) {
-        ERR("vtfs_init_inode got null pointer to node");
-        return -EINVAL;
-    }
-
-    if (!inode) {
-        ERR("vtfs_init_inode got null pointer to inode");
-        return -EINVAL;
-    }
-
-    inode_init_owner(idmap, inode, dir, mode | 0777);
-
-    node_inc_refcount(node);
-
-    inode->i_private = node;
-    inode->i_ino = node->id;
-
-    if (S_ISDIR(inode->i_mode)) {
-        inode->i_op = &vtfs_dir_operations;
-        inode->i_fop = &vtfs_dir_fops;
-    } else {
-        inode->i_fop = &vtfs_file_fops;
-    }
-
-    simple_inode_init_ts(inode);
-    return 0;
-}
-
-struct dentry *vtfs_lookup(struct inode *inode, struct dentry *dentry, unsigned int flags) {
-    vtfs_node *dir = inode->i_private;
-
-    vtfs_node *finded_node = directory_find(dir, dentry->d_name.name, dentry->d_name.len);
-
-    if (!finded_node) {
-        d_add(dentry, NULL);
-        return NULL;
-    }
-
-    umode_t mode = finded_node->type == VTFS_FILE ? S_IFREG : S_IFDIR;
-
-    struct inode *finded_inode = vtfs_get_inode(inode->i_sb, inode, mode, finded_node);
-
-    node_dec_refcount(finded_node);
-
-    if (!finded_inode) {
-        return ERR_PTR(-ENOMEM);
-    }
-
-    d_add(dentry, finded_inode);
-    return NULL;
-}
-
-int vtfs_create(struct mnt_idmap *idmap, struct inode *dir, struct dentry *dentry, umode_t mode,
-                bool b) {
-    const struct qstr *qname = &dentry->d_name;
-
-    char *name = kmemdup_nul(qname->name, qname->len, GFP_KERNEL);
-
-    if (!name) {
-        return -ENOMEM;
-    }
-
-    struct inode *inode = new_inode(dir->i_sb);
-
-    if (!inode) {
-        kfree(name);
-        ERR("vtfs_create couldn't create new inode");
-        return -ENOMEM;
-    }
-
-    vtfs_node *dir_node = dir->i_private;
-
-    if (!dir_node) {
-        ERR("vtfs_create got null pointer to vtfs_node in dir");
-        iput(inode);
-        kfree(name);
-        return -EINVAL;
-    }
-
-    vtfs_node *file_node = NULL;
-    int code = fs_create_file(dir->i_sb, dir_node, &file_node, name);
-
-    if (code < 0) {
-        iput(inode);
-        kfree(name);
-
-        return code;
-    }
-
-    vtfs_init_inode(inode, dir, mode, file_node, idmap);
-
-    d_add(dentry, inode);
-
-    kfree(name);
-
-    node_dec_refcount(file_node);
-
-    inode_set_mtime_to_ts(dir, inode_set_ctime_current(dir));
-
-    LOG("vtfs_create created new file");
-    return 0;
-}
-
-int vtfs_iterate(struct file *file, struct dir_context *ctx) {
-    LOG("vtfs_iterate called");
-
-    int code = fs_iterate(file, ctx);
-
-    if (code < 0) {
-        ERR("vtfs_iterate got an error");
-    }
-
-    return code;
-}
-
-int vtfs_unlink(struct inode *parent, struct dentry *child) {
-    LOG("vtfs_unlink called");
-
-    int code = fs_unlink(parent, child);
-
-    if (code < 0) {
-        ERR("vtfs_unlink didn't successfuly unlink file");
-        return code;
-    }
-
-    struct inode *inode = d_inode(child);
-
-    drop_nlink(inode);
-    inode_set_ctime_current(inode);
-
-    inode_set_mtime_to_ts(parent, inode_set_ctime_current(parent));
-
-    LOG("vtfs_unlink successfuly unlinked a file");
-
-    return 0;
-}
-
-static void vtfs_evict_inode(struct inode *inode) {
-    LOG("vtfs_evict_inode removing link to node");
-    vtfs_node *node = inode->i_private;
-
-    truncate_inode_pages_final(&inode->i_data);
-    clear_inode(inode);
-
-    inode->i_private = NULL;
-
-    if (node) {
-        node_dec_refcount(node);
-    }
+    pr_info("VTFS: filesystem unmounted\n");
 }
 
 static void vtfs_put_super(struct super_block *sb) {
-    LOG("Starting of put_super: clearing vtfs nodes");
     fs_free_info(sb);
 }
 
+static struct file_system_type vtfs_type = {
+    .owner = THIS_MODULE,
+    .name = "vtfs",
+    .mount = vtfs_mount,
+    .kill_sb = vtfs_kill_sb,
+};
+
 static int __init vtfs_init(void) {
-    LOG("VTFS joined the kernel yo\n");
-    return register_filesystem(&my_vtfs_type);
+    pr_info("VTFS: module loaded\n");
+    return register_filesystem(&vtfs_type);
 }
 
 static void __exit vtfs_exit(void) {
-    LOG("VTFS left the kernel out of this house\n");
-    unregister_filesystem(&my_vtfs_type);
+    unregister_filesystem(&vtfs_type);
+    pr_info("VTFS: module unloaded\n");
 }
 
 module_init(vtfs_init);

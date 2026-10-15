@@ -74,7 +74,7 @@ int connect_to_server(vtfs_server_info *server, struct socket **socket) {
 static int fill_request_buffer(char *headers, vtfs_http_request *request, size_t len,
                                vtfs_server_info *server) {
     return snprintf(headers, len, headers_format, request->method, request->path, server->server_ip,
-                    (unsigned int)server->server_port, request->body_len);
+                    (unsigned int)server->server_port, server->login, request->body_len);
 }
 
 /**

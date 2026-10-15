@@ -7,6 +7,7 @@
 #include <net/sock.h>
 #include <net/net_namespace.h>
 #include <linux/err.h>
+#include "server/server_info.h"
 
 #define SEND_TIMOUT 3
 #define RECEIVE_TIMOUT 15
@@ -27,12 +28,6 @@ typedef struct vtfs_http_response {
     int http_result;
     size_t data_length;
 } vtfs_http_response;
-
-typedef struct vtfs_server_info {
-    const char *server_ip;
-    u16 server_port;
-    const char *login;
-} vtfs_server_info;
 
 static const char headers_format[] =
     "%s %s HTTP/1.1\r\n"

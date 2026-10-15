@@ -6,32 +6,18 @@
 #include "linux/dcache.h"
 #include "node.h"
 #include <linux/dirent.h>
+#include "../server/server_info.h"
 
 typedef struct vtfs_info {
     vtfs_node *root_dir;
     atomic_long_t next_inode_no;
+
+    vtfs_server_info *server_info;
 } vtfs_info;
 
-typedef struct vtfs_server_info {
-    const char *server_ip;
-    const char *server_port;
-    const char *login;
-} vtfs_server_info;
+int fs_mount(vtfs_server_info *server, vtfs_server_inode *inode);
 
-int fs_init_info(struct super_block *block);
-unsigned long fs_get_next_inode_no(struct super_block *super_block);
+int fs_init_info(struct super_block *block, const char *server_ip, u16 server_port,
+                 const char *login);
 void fs_free_info(struct super_block *block);
-
-int fs_init_directory(struct super_block *sb, vtfs_node **node);
-int fs_init_file(struct super_block *sb, vtfs_node **node);
-
-vtfs_node *fs_init_root_directory(void);
-
-int fs_create_file(struct super_block *sb, vtfs_node *parent_dir, vtfs_node **new_file,
-                   const char *name);
-
-int fs_iterate(struct file *file, struct dir_context *ctx);
-
-int fs_unlink(struct inode *parent_dir, struct dentry *child);
-
 #endif
