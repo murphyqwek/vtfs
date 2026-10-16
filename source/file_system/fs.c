@@ -7,6 +7,8 @@
 #include "../helpers.h"
 #include "asm-generic/errno-base.h"
 #include "asm-generic/errno.h"
+#include "linux/dcache.h"
+#include "linux/device.h"
 #include "linux/gfp_types.h"
 #include "linux/stat.h"
 #include "linux/stddef.h"
@@ -228,4 +230,53 @@ int fs_mkdir(struct super_block *block, struct inode *parent, struct dentry *den
     kfree(name);
 
     return code;
+}
+
+static int fs_remove_base(struct inode *parent, struct dentry *dentry, bool directory) {
+    if (!parent || !dentry) {
+        return -EINVAL;
+    }
+
+    if (!S_ISDIR(parent->i_mode)) {
+        return -ENOTDIR;
+    }
+
+    vtfs_info *info = parent->i_sb->s_fs_info;
+
+    if (!info || !info->server_info) {
+        return -EINVAL;
+    }
+
+    if (dentry->d_name.len == 0) {
+        return -EINVAL;
+    }
+
+    if (dentry->d_name.len > VTFS_MAX_NAME_LEN) {
+        return -ENAMETOOLONG;
+    }
+
+    char *name = kmemdup_nul(dentry->d_name.name, dentry->d_name.len, GFP_KERNEL);
+
+    if (!name) {
+        return -ENOMEM;
+    }
+
+    int code = 0;
+    if (directory) {
+        code = server_rmdir(info->server_info, name, (u64)parent->i_ino);
+    } else {
+        code = server_unlink(info->server_info, name, (u64)parent->i_ino);
+    }
+
+    kfree(name);
+
+    return code;
+}
+
+int fs_unlink(struct inode *parent, struct dentry *dentry) {
+    return fs_remove_base(parent, dentry, false);
+}
+
+int fs_rmdir(struct inode *parent, struct dentry *dentry) {
+    return fs_remove_base(parent, dentry, true);
 }

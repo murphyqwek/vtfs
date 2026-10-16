@@ -30,4 +30,8 @@ int fs_create(struct super_block *block, struct inode *parent, struct dentry *de
 
 int fs_mkdir(struct super_block *block, struct inode *parent, struct dentry *dentry,
              vtfs_server_inode *server_inode);
+
+int fs_unlink(struct inode *parent, struct dentry *dentry);
+
+int fs_rmdir(struct inode *parent, struct dentry *dentry);
 #endif

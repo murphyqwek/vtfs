@@ -44,6 +44,8 @@ static struct inode_operations vtfs_dir_inode_operations = {
     .lookup = vtfs_lookup,
     .mkdir = vtfs_mkdir,
     .create = vtfs_create,
+    .unlink = vtfs_unlink,
+    .rmdir = vtfs_rmdir,
 };
 
 static struct file_operations vtfs_dir_operations = {
@@ -314,6 +316,54 @@ int vtfs_mkdir(struct mnt_idmap *idmap, struct inode *parent, struct dentry *den
 
     return 0;
 }
+
+int vtfs_unlink(struct inode *parent, struct dentry *dentry) {
+    struct inode *inode = d_inode(dentry);
+
+    if (!inode) {
+        return -ENOENT;
+    }
+
+    if (S_ISDIR(inode->i_mode)) {
+        return -EISDIR;
+    }
+
+    int code = fs_unlink(parent, dentry);
+
+    if (code < 0) {
+        return code;
+    }
+
+    if (inode->i_nlink > 0) {
+        drop_nlink(inode);
+    }
+
+    return 0;
+}
+
+int vtfs_rmdir(struct inode *parent, struct dentry *dentry) {
+    struct inode *inode = d_inode(dentry);
+
+    if (!inode) {
+        return -ENOENT;
+    }
+
+    if (S_ISREG(inode->i_mode)) {
+        return -ENOTDIR;
+    }
+
+    int code = fs_rmdir(parent, dentry);
+
+    if (code < 0) {
+        return code;
+    }
+
+    clear_nlink(inode);
+
+    return 0;
+}
+
+int vtfs_rmdir(struct inode *parent, struct dentry *dentry);
 
 static struct dentry *vtfs_mount(struct file_system_type *fs_type, int flags, const char *dev_name,
                                  void *data) {

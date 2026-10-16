@@ -15,4 +15,8 @@ int server_create(vtfs_server_info *server, const char *name, u64 parent_id,
 
 int server_mkdir(vtfs_server_info *server, const char *name, u64 parent_id,
                  vtfs_server_inode *inode);
+
+int server_unlink(vtfs_server_info *server, const char *name, u64 parent_id);
+
+int server_rmdir(vtfs_server_info *server, const char *name, u64 parent_id);
 #endif  // !VTFS_SERVER_H

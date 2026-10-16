@@ -12,4 +12,8 @@ int vtfs_create(struct mnt_idmap *idmap, struct inode *parent, struct dentry *de
                 bool excl);
 
 int vtfs_mkdir(struct mnt_idmap *idmap, struct inode *parent, struct dentry *dentry, umode_t mode);
+
+int vtfs_unlink(struct inode *parent, struct dentry *dentry);
+
+int vtfs_rmdir(struct inode *parent, struct dentry *dentry);
 #endif

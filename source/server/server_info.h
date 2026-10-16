@@ -5,6 +5,7 @@
 
 #define GET "GET"
 #define POST "POST"
+#define DELETE "DELETE"
 
 #define VTFS_SERVER_FILE_TYPE 1
 #define VTFS_SERVER_DIR_TYEPE 2

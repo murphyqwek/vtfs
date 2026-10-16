@@ -52,6 +52,47 @@ char *escape_json_name(const char *name, size_t len) {
     return result;
 }
 
+static int call_api_parent_inode_name(vtfs_server_info *server, const char *name, u64 parent_id,
+                                      const char *url, const char *method,
+                                      vtfs_http_response *response) {
+    if (!server || !name || !url || !method || !response) {
+        return -EINVAL;
+    }
+
+    size_t name_len = strnlen(name, VTFS_MAX_NAME_LEN + 1);
+
+    if (name_len > VTFS_MAX_NAME_LEN) {
+        return -ENAMETOOLONG;
+    }
+
+    char *escaped_name = escape_json_name(name, name_len);
+    if (!escaped_name) {
+        return -ENOMEM;
+    }
+
+    char *body = kasprintf(GFP_KERNEL, "{\"parent_inode_id\":%llu,\"name\":\"%s\"}",
+                           (unsigned long long)parent_id, escaped_name);
+
+    kfree(escaped_name);
+
+    if (!body) {
+        return -ENOMEM;
+    }
+
+    vtfs_http_request request = {
+        .method = method,
+        .path = url,
+        .body = body,
+        .body_len = strlen(body),
+    };
+
+    int code = execute_request(server, &request, response);
+
+    kfree(body);
+
+    return code;
+}
+
 int server_mount(vtfs_server_info *server, vtfs_server_inode *inode) {
     vtfs_http_request request = {
         .method = GET,
@@ -156,42 +197,13 @@ int server_lookup(vtfs_server_info *server, const char *name, u64 parent_id,
 
 static int server_create_base(vtfs_server_info *server, const char *name, u64 parent_id,
                               vtfs_server_inode *inode, const char *url) {
-    if (!server || !name || !inode) {
+    if (!inode) {
         return -EINVAL;
     }
 
-    size_t name_len = strnlen(name, VTFS_MAX_NAME_LEN + 1);
-
-    if (name_len > VTFS_MAX_NAME_LEN) {
-        return -ENAMETOOLONG;
-    }
-
-    char *escaped_name = escape_json_name(name, name_len);
-    if (!escaped_name) {
-        return -ENOMEM;
-    }
-
-    char *body = kasprintf(GFP_KERNEL, "{\"parent_inode_id\":%llu,\"name\":\"%s\"}",
-                           (unsigned long long)parent_id, escaped_name);
-
-    if (!body) {
-        return -ENOMEM;
-    }
-
-    kfree(escaped_name);
-
-    vtfs_http_request request = {
-        .method = POST,
-        .path = url,
-        .body = body,
-        .body_len = strlen(body),
-    };
-
     vtfs_http_response response = {0};
 
-    int code = execute_request(server, &request, &response);
-
-    kfree(body);
+    int code = call_api_parent_inode_name(server, name, parent_id, url, POST, &response);
 
     if (code < 0) {
         ERR("server_create/mkdir got error on execution request");
@@ -227,4 +239,42 @@ int server_mkdir(vtfs_server_info *server, const char *name, u64 parent_id,
     LOG("begin server mkdir");
 
     return server_create_base(server, name, parent_id, inode, "/api/mkdir");
+}
+
+static int server_remove(vtfs_server_info *server, const char *name, u64 parent_id,
+                         const char *url) {
+    vtfs_http_response response = {0};
+
+    int code = call_api_parent_inode_name(server, name, parent_id, url, DELETE, &response);
+
+    if (code < 0) {
+        ERR("server_remove got error on execution request");
+        response_free(&response);
+        return code;
+    }
+
+    if (request_success(response.http_result)) {
+        LOG("server_remove got success");
+        code = 0;
+    } else {
+        LOG("server_remove got error response from server");
+        int error_code = parse_to_error_code(response.data, response.data_length, &code);
+        if (error_code < 0) {
+            code = error_code;
+        }
+    }
+
+    response_free(&response);
+
+    return code;
+}
+
+int server_unlink(vtfs_server_info *server, const char *name, u64 parent_id) {
+    LOG("begin unlink");
+    return server_remove(server, name, parent_id, "/api/unlink");
+}
+
+int server_rmdir(vtfs_server_info *server, const char *name, u64 parent_id) {
+    LOG("begin rmdir");
+    return server_remove(server, name, parent_id, "/api/rmdir");
 }
