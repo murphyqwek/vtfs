@@ -1,4 +1,5 @@
 #include <linux/module.h>
+
 #include <linux/init.h>
 #include <linux/fs.h>
 #include <linux/mount.h>
@@ -8,17 +9,23 @@
 #include <linux/string.h>
 #include <linux/kstrtox.h>
 
-#include "server/server.h"
+#include "asm-generic/errno-base.h"
+#include "linux/dcache.h"
+#include "linux/stat.h"
+#include "linux/stddef.h"
+#include "linux/time64.h"
 #include "server/server_info.h"
-#include "vtfs.h"
 #include "file_system/fs.h"
+
+#include "server/server_info.h"
+
+#include "linux/namei.h"
+
+#include "vtfs.h"
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Arseny Starikov P3313");
 MODULE_DESCRIPTION("VTFS network filesystem");
-
-#define VTFS_MAX_SERVER_LEN 64
-#define VTFS_MAX_LOGIN_LEN 64
 
 struct vtfs_mount_options {
     char server[VTFS_MAX_SERVER_LEN];
@@ -32,6 +39,95 @@ static const struct super_operations vtfs_super_ops = {
     .put_super = vtfs_put_super,
 };
 
+static struct inode_operations vtfs_dir_inode_operations = {
+    .lookup = vtfs_lookup,
+};
+
+static struct file_operations vtfs_dir_operations = {
+
+};
+
+static struct inode_operations vtfs_file_inode_operations = {
+
+};
+
+static struct file_operations vtfs_file_operations = {
+
+};
+
+static int vtfs_d_revalidate(struct dentry *dentry, unsigned int flags) {
+    if (flags & LOOKUP_RCU) {
+        return -ECHILD;
+    }
+
+    return 0;
+}
+
+static struct dentry_operations vtfs_dentry_opretations = {
+    .d_revalidate = vtfs_d_revalidate,
+};
+
+static struct timespec64 vtfs_ms_to_timespec(u64 ms) {
+    return (struct timespec64){
+        .tv_sec = ms / 1000,
+        .tv_nsec = (ms % 1000) * NSEC_PER_MSEC,
+    };
+}
+
+static void vtfs_update_inode_locked(struct inode *inode, const vtfs_server_inode *server_inode) {
+    if (!inode || !server_inode) {
+        return;
+    }
+
+    i_size_write(inode, server_inode->size_bytes);
+
+    set_nlink(inode, server_inode->nlink);
+
+    inode_set_mtime_to_ts(inode, vtfs_ms_to_timespec(server_inode->modified_at));
+    inode_set_ctime_to_ts(inode, vtfs_ms_to_timespec(server_inode->changhed_at));
+}
+
+static struct inode *vtfs_get_inode(struct super_block *block,
+                                    const vtfs_server_inode *server_inode) {
+    if (!block || !server_inode) {
+        return ERR_PTR(-EINVAL);
+    }
+
+    if (server_inode->inode_id == 0) {
+        return ERR_PTR(-EINVAL);
+    }
+
+    struct inode *inode = iget_locked(block, server_inode->inode_id);
+
+    if (!inode) {
+        return ERR_PTR(-ENOMEM);
+    }
+
+    if (inode->i_state & I_NEW) {
+        inode->i_ino = server_inode->inode_id;
+
+        if (server_inode->type == VTFS_SERVER_DIR_TYEPE) {
+            inode->i_mode = S_IFDIR | 0777;
+            inode->i_op = &vtfs_dir_inode_operations;
+            inode->i_fop = &vtfs_dir_operations;
+        } else {
+            inode->i_mode = S_IFREG | 0777;
+            inode->i_op = &vtfs_file_inode_operations;
+            inode->i_fop = &vtfs_file_operations;
+        }
+
+        vtfs_update_inode_locked(inode, server_inode);
+        unlock_new_inode(inode);
+        return inode;
+    }
+
+    inode_lock(inode);
+    vtfs_update_inode_locked(inode, server_inode);
+    inode_unlock(inode);
+
+    return inode;
+}
+
 static int vtfs_parse_options(void *data, struct vtfs_mount_options *opts) {
     char *options, *cursor, *token;
     bool has_server = false;
@@ -39,14 +135,17 @@ static int vtfs_parse_options(void *data, struct vtfs_mount_options *opts) {
     bool has_login = false;
     int ret = 0;
 
-    if (!data)
+    if (!data) {
         return -EINVAL;
+    }
 
     memset(opts, 0, sizeof(*opts));
 
     options = kstrdup(data, GFP_KERNEL);
-    if (!options)
+
+    if (!options) {
         return -ENOMEM;
+    }
 
     cursor = options;
 
@@ -120,17 +219,13 @@ static int vtfs_fill_super(struct super_block *sb, void *data, int silent) {
         return ret;
     }
 
-    root_inode = new_inode(sb);
-    if (!root_inode) {
-        ret = -ENOMEM;
+    root_inode = vtfs_get_inode(sb, &inode);
+
+    if (IS_ERR(root_inode)) {
+        ret = PTR_ERR(root_inode);
         fs_free_info(sb);
         return ret;
     }
-
-    root_inode->i_ino = inode.inode_id;
-    root_inode->i_mode = S_IFDIR | 0755;
-    set_nlink(root_inode, inode.nlink);
-    simple_inode_init_ts(root_inode);
 
     sb->s_root = d_make_root(root_inode);
     if (!sb->s_root) {
@@ -139,8 +234,35 @@ static int vtfs_fill_super(struct super_block *sb, void *data, int silent) {
         return ret;
     }
 
+    sb->s_d_op = &vtfs_dentry_opretations;
+    sb->s_op = &vtfs_super_ops;
     pr_info("VTFS: filesystem mounted\n");
     return 0;
+}
+
+struct dentry *vtfs_lookup(struct inode *parent, struct dentry *dentry, unsigned int falgs) {
+    struct super_block *block = parent->i_sb;
+
+    vtfs_server_inode server_inode = {0};
+
+    int code = fs_lookup(block, parent, dentry, &server_inode);
+
+    if (code == -ENOENT) {
+        d_add(dentry, NULL);
+        return NULL;
+    }
+
+    if (code < 0) {
+        return ERR_PTR(code);
+    }
+
+    struct inode *inode = vtfs_get_inode(block, &server_inode);
+
+    if (IS_ERR(inode)) {
+        return ERR_CAST(inode);
+    }
+
+    return d_splice_alias(inode, dentry);
 }
 
 static struct dentry *vtfs_mount(struct file_system_type *fs_type, int flags, const char *dev_name,

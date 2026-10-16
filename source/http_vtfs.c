@@ -7,6 +7,7 @@
 #include "linux/socket.h"
 #include "linux/stddef.h"
 #include "linux/uio.h"
+#include "net/dst.h"
 #include "net/sock.h"
 #include <linux/string.h>
 
@@ -481,4 +482,56 @@ void response_free(vtfs_http_response *response) {
     response->http_result = 0;
     response->data = NULL;
     response->data_length = 0;
+}
+
+static bool is_sym_not_need_to_be_enocde(unsigned char c) {
+    return ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+            (c == '=' || c == '_' || c == '.' || c == '~'));
+}
+
+/**
+ * url_encode - encode url
+ * @source: source url data
+ * @source_len: len of source url data
+ * @result: encoded url data
+ * @result_size: max expected encoded url data len
+ *
+ * Return: encoded url data len or error code
+ */
+int url_encode(const char *source, size_t source_len, char *result, size_t result_size) {
+    if (!source || !result) {
+        return -EINVAL;
+    }
+
+    static const char hex[] = "0123456789ABCDEF";
+
+    size_t j = 0;
+
+    for (size_t i = 0; i < source_len; i++) {
+        unsigned char sym = (unsigned char)source[i];
+
+        if (is_sym_not_need_to_be_enocde(sym)) {
+            if (result_size - j <= 1) {
+                return -ENOSPC;
+            }
+
+            result[j++] = sym;
+
+            continue;
+        }
+
+        if (result_size - j <= 3) {
+            return -ENOSPC;
+        }
+
+        result[j++] = '%';
+        result[j++] = hex[sym >> 4];
+        result[j++] = hex[sym & 0x0F];
+    }
+
+    if (j >= result_size) {
+        return -ENOSPC;
+    }
+
+    return (int)j;
 }

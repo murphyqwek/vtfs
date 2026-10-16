@@ -8,6 +8,7 @@
 #include "asm-generic/errno-base.h"
 #include "asm-generic/errno.h"
 #include "linux/gfp_types.h"
+#include "linux/stat.h"
 #include "linux/stddef.h"
 #include "../server/server.h"
 
@@ -112,4 +113,49 @@ void fs_free_info(struct super_block *block) {
     block->s_fs_info = NULL;
 
     LOG("filesystem info was free");
+}
+
+/**
+ * fs_lookup - realization of lookup
+ * @block: super block
+ * @parent: parent inode
+ * @dentry: dentry
+ * @server_inode: result inode
+ *
+ *
+ * Return: 0 if all good else error code
+ */
+int fs_lookup(struct super_block *block, struct inode *parent, struct dentry *dentry,
+              vtfs_server_inode *server_inode) {
+    if (!block || !dentry || !server_inode || !parent) {
+        return -EINVAL;
+    }
+
+    if (!S_ISDIR(parent->i_mode)) {
+        return -ENOTDIR;
+    }
+
+    vtfs_info *info = block->s_fs_info;
+
+    if (!info) {
+        return -EINVAL;
+    }
+
+    vtfs_server_info *server = info->server_info;
+
+    if (!server) {
+        return -EINVAL;
+    }
+
+    char *name = kmemdup_nul(dentry->d_name.name, dentry->d_name.len, GFP_KERNEL);
+
+    if (!name) {
+        return -ENOMEM;
+    }
+
+    int code = server_lookup(server, name, (u64)parent->i_ino, server_inode);
+
+    kfree(name);
+
+    return code;
 }

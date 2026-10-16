@@ -55,4 +55,5 @@ int execute_request(vtfs_server_info *server, vtfs_http_request *request,
 
 void response_free(vtfs_http_response *response);
 
+int url_encode(const char *source, size_t source_len, char *result, size_t result_size);
 #endif  // !HTTP_VTF_NEW_H

@@ -19,5 +19,9 @@ int fs_mount(vtfs_server_info *server, vtfs_server_inode *inode);
 
 int fs_init_info(struct super_block *block, const char *server_ip, u16 server_port,
                  const char *login);
+
 void fs_free_info(struct super_block *block);
+
+int fs_lookup(struct super_block *block, struct inode *parent, struct dentry *dentry,
+              vtfs_server_inode *server_inode);
 #endif
