@@ -2,16 +2,11 @@
 #define VTFS_FILE_SYSTEM_H
 
 #include <linux/fs.h>
-#include "directory.h"
 #include "linux/dcache.h"
-#include "node.h"
 #include <linux/dirent.h>
 #include "../server/server_info.h"
 
 typedef struct vtfs_info {
-    vtfs_node *root_dir;
-    atomic_long_t next_inode_no;
-
     vtfs_server_info *server_info;
 } vtfs_info;
 
