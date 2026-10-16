@@ -10,6 +10,7 @@
 #include <linux/kstrtox.h>
 
 #include "asm-generic/errno-base.h"
+#include "asm-generic/errno.h"
 #include "linux/dcache.h"
 #include "linux/stat.h"
 #include "linux/stddef.h"
@@ -41,6 +42,8 @@ static const struct super_operations vtfs_super_ops = {
 
 static struct inode_operations vtfs_dir_inode_operations = {
     .lookup = vtfs_lookup,
+    .mkdir = vtfs_mkdir,
+    .create = vtfs_create,
 };
 
 static struct file_operations vtfs_dir_operations = {
@@ -263,6 +266,53 @@ struct dentry *vtfs_lookup(struct inode *parent, struct dentry *dentry, unsigned
     }
 
     return d_splice_alias(inode, dentry);
+}
+
+int vtfs_create(struct mnt_idmap *idmap, struct inode *parent, struct dentry *dentry, umode_t mode,
+                bool excl) {
+    vtfs_server_inode server_inode = {0};
+
+    int code = fs_create(parent->i_sb, parent, dentry, &server_inode);
+
+    if (code < 0) {
+        return code;
+    }
+
+    if (server_inode.type != VTFS_SERVER_FILE_TYPE) {
+        return -EPROTO;
+    }
+
+    struct inode *inode = vtfs_get_inode(parent->i_sb, &server_inode);
+    if (IS_ERR(inode)) {
+        return PTR_ERR(inode);
+    }
+
+    d_instantiate(dentry, inode);
+
+    return 0;
+}
+
+int vtfs_mkdir(struct mnt_idmap *idmap, struct inode *parent, struct dentry *dentry, umode_t mode) {
+    vtfs_server_inode server_inode = {0};
+
+    int code = fs_mkdir(parent->i_sb, parent, dentry, &server_inode);
+
+    if (code < 0) {
+        return code;
+    }
+
+    if (server_inode.type != VTFS_SERVER_DIR_TYEPE) {
+        return -EPROTO;
+    }
+
+    struct inode *inode = vtfs_get_inode(parent->i_sb, &server_inode);
+    if (IS_ERR(inode)) {
+        return PTR_ERR(inode);
+    }
+
+    d_instantiate(dentry, inode);
+
+    return 0;
 }
 
 static struct dentry *vtfs_mount(struct file_system_type *fs_type, int flags, const char *dev_name,

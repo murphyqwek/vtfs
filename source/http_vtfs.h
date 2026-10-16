@@ -33,7 +33,7 @@ static const char headers_format[] =
     "%s %s HTTP/1.1\r\n"
     "Host: %s:%u\r\n"
     "X-Login: %s\r\n"
-    "Content-Type: application/octet-stream\r\n"
+    "Content-Type: application/json\r\n"
     "Content-Length: %zu\r\n"
     "Connection: close\r\n"
     "\r\n";

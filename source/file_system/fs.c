@@ -159,3 +159,73 @@ int fs_lookup(struct super_block *block, struct inode *parent, struct dentry *de
 
     return code;
 }
+
+static int fs_create_init_base(struct super_block *block, struct inode *parent,
+                               struct dentry *dentry, vtfs_server_inode *server_inode,
+                               char **name) {
+    if (!block || !parent || !dentry || !server_inode || !name) {
+        return -EINVAL;
+    }
+
+    if (!S_ISDIR(parent->i_mode)) {
+        return -ENOTDIR;
+    }
+
+    vtfs_info *info = block->s_fs_info;
+
+    if (!info || !info->server_info) {
+        return -EINVAL;
+    }
+
+    if (dentry->d_name.len == 0) {
+        return -EINVAL;
+    }
+
+    if (dentry->d_name.len > VTFS_MAX_NAME_LEN) {
+        return -ENAMETOOLONG;
+    }
+
+    *name = kmemdup_nul(dentry->d_name.name, dentry->d_name.len, GFP_KERNEL);
+
+    if (!(*name)) {
+        return -ENOMEM;
+    }
+
+    return 0;
+}
+
+int fs_create(struct super_block *block, struct inode *parent, struct dentry *dentry,
+              vtfs_server_inode *server_inode) {
+    char *name = NULL;
+
+    int code = fs_create_init_base(block, parent, dentry, server_inode, &name);
+
+    if (code < 0) {
+        return code;
+    }
+
+    vtfs_info *info = block->s_fs_info;
+    code = server_create(info->server_info, name, (u64)parent->i_ino, server_inode);
+
+    kfree(name);
+
+    return code;
+}
+
+int fs_mkdir(struct super_block *block, struct inode *parent, struct dentry *dentry,
+             vtfs_server_inode *server_inode) {
+    char *name = NULL;
+
+    int code = fs_create_init_base(block, parent, dentry, server_inode, &name);
+
+    if (code < 0) {
+        return code;
+    }
+
+    vtfs_info *info = block->s_fs_info;
+    code = server_mkdir(info->server_info, name, (u64)parent->i_ino, server_inode);
+
+    kfree(name);
+
+    return code;
+}

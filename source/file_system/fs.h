@@ -24,4 +24,10 @@ void fs_free_info(struct super_block *block);
 
 int fs_lookup(struct super_block *block, struct inode *parent, struct dentry *dentry,
               vtfs_server_inode *server_inode);
+
+int fs_create(struct super_block *block, struct inode *parent, struct dentry *dentry,
+              vtfs_server_inode *server_inode);
+
+int fs_mkdir(struct super_block *block, struct inode *parent, struct dentry *dentry,
+             vtfs_server_inode *server_inode);
 #endif
