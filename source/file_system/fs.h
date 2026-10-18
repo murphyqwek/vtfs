@@ -5,6 +5,7 @@
 #include "linux/dcache.h"
 #include <linux/dirent.h>
 #include "../server/server_info.h"
+#include "linux/types.h"
 
 typedef struct vtfs_info {
     vtfs_server_info *server_info;
@@ -33,4 +34,6 @@ int fs_rmdir(struct inode *parent, struct dentry *dentry);
 int fs_iterate(struct inode *directory, struct dir_context *ctx);
 
 int fs_link(struct dentry *old_dentry, struct inode *directory, struct dentry *new_dentry);
+
+ssize_t fs_write(struct file *filp, const char __user *buffer, size_t len, loff_t *offset);
 #endif

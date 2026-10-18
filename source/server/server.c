@@ -5,6 +5,7 @@
 #include "asm-generic/errno-base.h"
 #include "asm-generic/errno.h"
 #include "linux/gfp_types.h"
+#include "linux/slab.h"
 #include "linux/sprintf.h"
 #include "linux/stddef.h"
 #include "linux/types.h"
@@ -406,5 +407,56 @@ int server_link(vtfs_server_info *server, u64 parent_id, u64 inode_id, const cha
 
     response_free(&response);
 
+    return code;
+}
+
+int server_write(vtfs_server_info *server, u64 inode_id, char *buffer, loff_t offset, size_t len) {
+    if (!server || !buffer) {
+        return -EINVAL;
+    }
+
+    if (offset < 0) {
+        return -EINVAL;
+    }
+
+    if (len > MAX_BODY_SIZE) {
+        return -EINVAL;
+    }
+
+    char *url = kasprintf(GFP_KERNEL, "/api/write?inode_id=%llu&offset=%lld&size=%zu",
+                          (unsigned long long)inode_id, (long long)offset, len);
+
+    if (!url) {
+        return -ENOMEM;
+    }
+
+    vtfs_http_request request = {
+        .method = POST,
+        .path = url,
+        .body = buffer,
+        .body_len = len,
+    };
+
+    vtfs_http_response response = {0};
+
+    int code = execute_request(server, &request, &response);
+
+    kfree(url);
+
+    if (code < 0) {
+        return code;
+    }
+
+    if (!request_success(response.http_result)) {
+        int parsed_coded = parse_to_error_code(response.data, response.data_length, &code);
+
+        if (parsed_coded < 0) {
+            code = parsed_coded;
+        }
+    } else {
+        code = 0;
+    }
+
+    response_free(&response);
     return code;
 }

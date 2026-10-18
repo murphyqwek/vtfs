@@ -1,6 +1,7 @@
 #ifndef VTFS_SERVER_H
 #define VTFS_SERVER_H
 
+#include "linux/types.h"
 #include "server_info.h"
 
 char *escape_json_name(const char *name, size_t len);
@@ -26,4 +27,6 @@ int server_iterate(vtfs_server_info *server, u64 parent_id, u64 cookie,
 void server_free_iterate_data(vtfs_iterate_result *iterate_result);
 
 int server_link(vtfs_server_info *server, u64 parent_id, u64 inode_id, const char *name);
+
+int server_write(vtfs_server_info *server, u64 inode_id, char *buffer, loff_t offset, size_t len);
 #endif  // !VTFS_SERVER_H

@@ -14,7 +14,9 @@
 #include "linux/stddef.h"
 #include "../server/server.h"
 #include "linux/types.h"
+#include "linux/uaccess.h"
 
+#include "../http_vtfs.h"
 /**
  * fs_init_info - inits a new filesystem information
  * @block: pointer to superblock
@@ -381,4 +383,70 @@ int fs_link(struct dentry *old_dentry, struct inode *directory, struct dentry *n
     kfree(name);
 
     return code;
+}
+
+ssize_t fs_write(struct file *filp, const char __user *buffer, size_t len, loff_t *offset) {
+    if (!filp || !buffer || !offset) {
+        return -EINVAL;
+    }
+
+    if (*offset < 0) {
+        return -EINVAL;
+    }
+
+    if (len == 0) {
+        return 0;
+    }
+
+    struct inode *inode = file_inode(filp);
+
+    if (!inode) {
+        return -EINVAL;
+    }
+
+    if (S_ISDIR(inode->i_mode)) {
+        return -EPERM;
+    }
+
+    vtfs_info *info = inode->i_sb->s_fs_info;
+
+    if (!info || !info->server_info) {
+        return -EINVAL;
+    }
+
+    char *send_buffer = kcalloc(MAX_BODY_SIZE, sizeof(char), GFP_KERNEL);
+
+    if (!send_buffer) {
+        return -ENOMEM;
+    }
+
+    size_t sent_data_count = 0;
+
+    while (sent_data_count < len) {
+        size_t toCopy =
+            len - sent_data_count > MAX_BODY_SIZE ? MAX_BODY_SIZE : len - sent_data_count;
+
+        if (copy_from_user(send_buffer, buffer + sent_data_count, toCopy)) {
+            kfree(send_buffer);
+            return sent_data_count > 0 ? (ssize_t)sent_data_count : -EFAULT;
+        }
+
+        int code = server_write(info->server_info, (u64)inode->i_ino, send_buffer, *offset, toCopy);
+
+        if (code < 0) {
+            kfree(send_buffer);
+            return sent_data_count > 0 ? (ssize_t)sent_data_count : code;
+        }
+
+        *offset += (loff_t)toCopy;
+        sent_data_count += toCopy;
+
+        if (*offset > i_size_read(inode)) {
+            i_size_write(inode, *offset);
+        }
+    }
+
+    kfree(send_buffer);
+
+    return (ssize_t)sent_data_count;
 }
