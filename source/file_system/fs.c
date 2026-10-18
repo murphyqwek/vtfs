@@ -348,3 +348,37 @@ int fs_iterate(struct inode *directory, struct dir_context *ctx) {
         }
     }
 }
+
+int fs_link(struct dentry *old_dentry, struct inode *directory, struct dentry *new_dentry) {
+    if (!old_dentry || !directory || !new_dentry) {
+        return -EINVAL;
+    }
+
+    if (!S_ISDIR(directory->i_mode)) {
+        return -EPERM;
+    }
+
+    struct inode *inode = d_inode(old_dentry);
+
+    if (!inode) {
+        return -EINVAL;
+    }
+
+    vtfs_info *info = inode->i_sb->s_fs_info;
+
+    if (!info || !info->server_info) {
+        return -EINVAL;
+    }
+
+    char *name = kmemdup_nul(new_dentry->d_name.name, new_dentry->d_name.len, GFP_KERNEL);
+
+    if (!name) {
+        return -ENOMEM;
+    }
+
+    int code = server_link(info->server_info, (u64)directory->i_ino, (u64)inode->i_ino, name);
+
+    kfree(name);
+
+    return code;
+}

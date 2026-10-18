@@ -18,4 +18,6 @@ int vtfs_unlink(struct inode *parent, struct dentry *dentry);
 int vtfs_rmdir(struct inode *parent, struct dentry *dentry);
 
 int vtfs_iterate(struct file *file, struct dir_context *ctx);
+
+int vtfs_link(struct dentry *old_dentry, struct inode *directory, struct dentry *new_dentry);
 #endif

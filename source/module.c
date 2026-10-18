@@ -46,6 +46,7 @@ static struct inode_operations vtfs_dir_inode_operations = {
     .create = vtfs_create,
     .unlink = vtfs_unlink,
     .rmdir = vtfs_rmdir,
+    .link = vtfs_link,
 };
 
 static struct file_operations vtfs_dir_operations = {
@@ -369,6 +370,22 @@ int vtfs_iterate(struct file *file, struct dir_context *ctx) {
     }
 
     return fs_iterate(file_inode(file), ctx);
+}
+
+int vtfs_link(struct dentry *old_dentry, struct inode *directory, struct dentry *new_dentry) {
+    int code = fs_link(old_dentry, directory, new_dentry);
+
+    if (code < 0) {
+        return code;
+    }
+
+    struct inode *inode = d_inode(old_dentry);
+
+    inc_nlink(inode);
+    ihold(inode);
+    d_instantiate(new_dentry, inode);
+
+    return 0;
 }
 
 static struct dentry *vtfs_mount(struct file_system_type *fs_type, int flags, const char *dev_name,

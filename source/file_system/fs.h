@@ -31,4 +31,6 @@ int fs_unlink(struct inode *parent, struct dentry *dentry);
 int fs_rmdir(struct inode *parent, struct dentry *dentry);
 
 int fs_iterate(struct inode *directory, struct dir_context *ctx);
+
+int fs_link(struct dentry *old_dentry, struct inode *directory, struct dentry *new_dentry);
 #endif

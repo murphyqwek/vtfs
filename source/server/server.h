@@ -24,4 +24,6 @@ int server_iterate(vtfs_server_info *server, u64 parent_id, u64 cookie,
                    vtfs_iterate_result *result);
 
 void server_free_iterate_data(vtfs_iterate_result *iterate_result);
+
+int server_link(vtfs_server_info *server, u64 parent_id, u64 inode_id, const char *name);
 #endif  // !VTFS_SERVER_H

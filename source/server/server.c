@@ -343,3 +343,68 @@ void server_free_iterate_data(vtfs_iterate_result *iterate_result) {
 
     *iterate_result = (vtfs_iterate_result){0};
 }
+
+int server_link(vtfs_server_info *server, u64 parent_id, u64 inode_id, const char *name) {
+    if (!server || !name) {
+        return -EINVAL;
+    }
+
+    size_t name_len = strnlen(name, VTFS_MAX_NAME_LEN + 1);
+
+    if (name_len > VTFS_MAX_NAME_LEN) {
+        return -ENAMETOOLONG;
+    }
+
+    if (name_len == 0) {
+        return -EINVAL;
+    }
+
+    char *escaped_name = escape_json_name(name, name_len);
+    if (!escaped_name) {
+        return -ENOMEM;
+    }
+
+    char *body =
+        kasprintf(GFP_KERNEL, "{\"parent_id\":%llu,\"inode_id\":%llu,\"name\":\"%s\"}",
+                  (unsigned long long)parent_id, (unsigned long long)inode_id, escaped_name);
+
+    kfree(escaped_name);
+
+    if (!body) {
+        return -ENOMEM;
+    }
+
+    vtfs_http_response response = {0};
+
+    vtfs_http_request request = {
+        .method = POST,
+        .path = "/api/link",
+        .body = body,
+        .body_len = strlen(body),
+    };
+
+    int code = execute_request(server, &request, &response);
+
+    kfree(body);
+
+    if (code < 0) {
+        ERR("server_link got error when executing request");
+        return code;
+    }
+
+    if (request_success(response.http_result)) {
+        response_free(&response);
+
+        return 0;
+    }
+
+    int parsed_error = parse_to_error_code(response.data, response.data_length, &code);
+
+    if (parsed_error < 0) {
+        code = parsed_error;
+    }
+
+    response_free(&response);
+
+    return code;
+}
