@@ -17,7 +17,6 @@
 #define VTFS_MAX_ENCODED_NAME_LEN (VTFS_MAX_SERVER_LEN * 3)
 
 #define VTFS_MAX_URL_SIZE 1000
-
 typedef struct vtfs_server_inode {
     u64 inode_id;
     u8 type;
