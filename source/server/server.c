@@ -278,3 +278,68 @@ int server_rmdir(vtfs_server_info *server, const char *name, u64 parent_id) {
     LOG("begin rmdir");
     return server_remove(server, name, parent_id, "/api/rmdir");
 }
+
+int server_iterate(vtfs_server_info *server, u64 parent_id, u64 cookie,
+                   vtfs_iterate_result *result) {
+    vtfs_http_response response = {0};
+
+    char *url = kasprintf(GFP_KERNEL, "/api/iterate?parent_id=%llu&limit=5&cookie=%llu",
+                          (unsigned long long)parent_id, (unsigned long long)cookie);
+
+    if (!url) {
+        return -ENOMEM;
+    }
+
+    vtfs_http_request request = {
+        .path = url,
+        .method = GET,
+        .body = NULL,
+        .body_len = 0,
+    };
+
+    LOG("server_iterate begin...");
+
+    int code = execute_request(server, &request, &response);
+
+    kfree(url);
+
+    if (code < 0) {
+        ERR("server_iterate got error during http request execution");
+        return code;
+    }
+
+    if (!request_success(response.http_result)) {
+        ERR("server_iterate got http error code");
+
+        int parse_error = parse_to_error_code(response.data, response.data_length, &code);
+
+        if (parse_error < 0) {
+            code = parse_error;
+        }
+    } else {
+        LOG("server_iterate got success");
+        code = parse_to_iterate_result(response.data, response.data_length, result);
+    }
+
+    response_free(&response);
+
+    return code;
+}
+
+void server_free_iterate_data(vtfs_iterate_result *iterate_result) {
+    if (iterate_result == NULL) {
+        return;
+    }
+
+    if (iterate_result->entries != NULL) {
+        for (size_t i = 0; i < iterate_result->entry_count; i++) {
+            kfree(iterate_result->entries[i].name);
+        }
+    }
+
+    kfree(iterate_result->entries);
+
+    iterate_result->entries = NULL;
+
+    *iterate_result = (vtfs_iterate_result){0};
+}

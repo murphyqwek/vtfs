@@ -49,7 +49,7 @@ static struct inode_operations vtfs_dir_inode_operations = {
 };
 
 static struct file_operations vtfs_dir_operations = {
-
+    .iterate_shared = vtfs_iterate,
 };
 
 static struct inode_operations vtfs_file_inode_operations = {
@@ -363,7 +363,13 @@ int vtfs_rmdir(struct inode *parent, struct dentry *dentry) {
     return 0;
 }
 
-int vtfs_rmdir(struct inode *parent, struct dentry *dentry);
+int vtfs_iterate(struct file *file, struct dir_context *ctx) {
+    if (!dir_emit_dots(file, ctx)) {
+        return 0;
+    }
+
+    return fs_iterate(file_inode(file), ctx);
+}
 
 static struct dentry *vtfs_mount(struct file_system_type *fs_type, int flags, const char *dev_name,
                                  void *data) {

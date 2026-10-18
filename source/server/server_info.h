@@ -34,4 +34,20 @@ typedef struct vtfs_server_info {
     char login[VTFS_MAX_LOGIN_LEN];
 } vtfs_server_info;
 
+typedef struct vtfs_iterate_entry {
+    u64 cookie;
+    u64 inode_id;
+    u8 type;
+    u16 name_length;
+    char *name;
+} vtfs_iterate_entry;
+
+typedef struct vtfs_iterate_result {
+    u64 next_cookie;
+    u32 entry_count;
+    u8 end_of_file;
+
+    vtfs_iterate_entry *entries;
+} vtfs_iterate_result;
+
 #endif  // !VTFS_SERVER_INFO_H

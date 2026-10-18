@@ -19,4 +19,9 @@ int server_mkdir(vtfs_server_info *server, const char *name, u64 parent_id,
 int server_unlink(vtfs_server_info *server, const char *name, u64 parent_id);
 
 int server_rmdir(vtfs_server_info *server, const char *name, u64 parent_id);
+
+int server_iterate(vtfs_server_info *server, u64 parent_id, u64 cookie,
+                   vtfs_iterate_result *result);
+
+void server_free_iterate_data(vtfs_iterate_result *iterate_result);
 #endif  // !VTFS_SERVER_H

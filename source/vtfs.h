@@ -16,4 +16,6 @@ int vtfs_mkdir(struct mnt_idmap *idmap, struct inode *parent, struct dentry *den
 int vtfs_unlink(struct inode *parent, struct dentry *dentry);
 
 int vtfs_rmdir(struct inode *parent, struct dentry *dentry);
+
+int vtfs_iterate(struct file *file, struct dir_context *ctx);
 #endif

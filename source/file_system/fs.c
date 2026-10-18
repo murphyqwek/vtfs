@@ -1,18 +1,19 @@
 #include "fs.h"
+#include "linux/fs.h"
 #include <linux/errno.h>
 #include <linux/atomic.h>
 #include <linux/slab.h>
-#include <linux/fs.h>
 #include <linux/string.h>
 #include "../helpers.h"
 #include "asm-generic/errno-base.h"
 #include "asm-generic/errno.h"
 #include "linux/dcache.h"
-#include "linux/device.h"
+#include "linux/fs_types.h"
 #include "linux/gfp_types.h"
 #include "linux/stat.h"
 #include "linux/stddef.h"
 #include "../server/server.h"
+#include "linux/types.h"
 
 /**
  * fs_init_info - inits a new filesystem information
@@ -279,4 +280,71 @@ int fs_unlink(struct inode *parent, struct dentry *dentry) {
 
 int fs_rmdir(struct inode *parent, struct dentry *dentry) {
     return fs_remove_base(parent, dentry, true);
+}
+
+int fs_iterate(struct inode *directory, struct dir_context *ctx) {
+    if (!directory || !ctx) {
+        return -EINVAL;
+    }
+
+    if (!S_ISDIR(directory->i_mode)) {
+        return -ENOTDIR;
+    }
+
+    vtfs_info *info = directory->i_sb->s_fs_info;
+
+    if (!info || !info->server_info) {
+        return -EINVAL;
+    }
+
+    if (ctx->pos < 2) {
+        return -EINVAL;
+    }
+
+    for (;;) {
+        vtfs_iterate_result result = {0};
+
+        u64 cookie = ctx->pos - 2;
+
+        int code = server_iterate(info->server_info, (u64)directory->i_ino, cookie, &result);
+
+        if (code < 0) {
+            server_free_iterate_data(&result);
+            return code;
+        }
+
+        if (result.entry_count == 0) {
+            bool eof = (bool)result.end_of_file;
+
+            server_free_iterate_data(&result);
+
+            return eof == true ? 0 : -EPROTO;
+        }
+
+        for (size_t i = 0; i < result.entry_count; i++) {
+            vtfs_iterate_entry *entry = &result.entries[i];
+
+            if (entry->cookie <= cookie) {
+                server_free_iterate_data(&result);
+                return -EPROTO;
+            }
+
+            unsigned int dtype = entry->type == VTFS_SERVER_FILE_TYPE ? DT_REG : DT_DIR;
+
+            if (!dir_emit(ctx, entry->name, entry->name_length, entry->inode_id, dtype)) {
+                server_free_iterate_data(&result);
+                return 0;
+            }
+
+            ctx->pos = (loff_t)entry->cookie + 2;
+        }
+
+        bool eof = (bool)result.end_of_file;
+
+        server_free_iterate_data(&result);
+
+        if (eof) {
+            return 0;
+        }
+    }
 }

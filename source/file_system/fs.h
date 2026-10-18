@@ -29,4 +29,6 @@ int fs_mkdir(struct super_block *block, struct inode *parent, struct dentry *den
 int fs_unlink(struct inode *parent, struct dentry *dentry);
 
 int fs_rmdir(struct inode *parent, struct dentry *dentry);
+
+int fs_iterate(struct inode *directory, struct dir_context *ctx);
 #endif

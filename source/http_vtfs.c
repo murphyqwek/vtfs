@@ -7,7 +7,6 @@
 #include "linux/socket.h"
 #include "linux/stddef.h"
 #include "linux/uio.h"
-#include "net/dst.h"
 #include "net/sock.h"
 #include <linux/string.h>
 
