@@ -22,4 +22,6 @@ int vtfs_iterate(struct file *file, struct dir_context *ctx);
 int vtfs_link(struct dentry *old_dentry, struct inode *directory, struct dentry *new_dentry);
 
 ssize_t vtfs_write(struct file *filp, const char __user *buffer, size_t len, loff_t *offset);
+
+ssize_t vtfs_read(struct file *filp, char __user *buffer, size_t len, loff_t *offset);
 #endif

@@ -423,8 +423,8 @@ int server_write(vtfs_server_info *server, u64 inode_id, char *buffer, loff_t of
         return -EINVAL;
     }
 
-    char *url = kasprintf(GFP_KERNEL, "/api/write?inode_id=%llu&offset=%lld&size=%zu",
-                          (unsigned long long)inode_id, (long long)offset, len);
+    char *url = kasprintf(GFP_KERNEL, "/api/write?inode_id=%llu&offset=%lld",
+                          (unsigned long long)inode_id, (long long)offset);
 
     if (!url) {
         return -ENOMEM;
@@ -458,5 +458,68 @@ int server_write(vtfs_server_info *server, u64 inode_id, char *buffer, loff_t of
     }
 
     response_free(&response);
+    return code;
+}
+
+int server_read(vtfs_server_info *server, u64 inode_id, char *buffer, loff_t offset, size_t len) {
+    if (!server || !buffer) {
+        return -EINVAL;
+    }
+
+    if (offset < 0) {
+        return -EINVAL;
+    }
+
+    if (len > MAX_BODY_SIZE) {
+        return -EINVAL;
+    }
+
+    char *url = kasprintf(GFP_KERNEL, "/api/read?inode_id=%llu&offset=%lld&size=%zu",
+                          (unsigned long long)inode_id, (long long)offset, len);
+
+    if (!url) {
+        return -ENOMEM;
+    }
+
+    vtfs_http_request request = {
+        .method = GET,
+        .path = url,
+        .body = NULL,
+        .body_len = 0,
+    };
+
+    vtfs_http_response response = {0};
+
+    int code = execute_request(server, &request, &response);
+
+    kfree(url);
+
+    if (code < 0) {
+        return code;
+    }
+
+    if (request_success(response.http_result)) {
+        if (response.data_length > len) {
+            response_free(&response);
+            return -EPROTO;
+        }
+
+        if (response.data_length > 0) {
+            memcpy(buffer, response.data, response.data_length);
+        }
+
+        code = (int)response.data_length;
+    }
+
+    else {
+        int parsed_code = parse_to_error_code(response.data, response.data_length, &code);
+
+        if (parsed_code < 0) {
+            code = parsed_code;
+        }
+    }
+
+    response_free(&response);
+
     return code;
 }

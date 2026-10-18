@@ -450,3 +450,71 @@ ssize_t fs_write(struct file *filp, const char __user *buffer, size_t len, loff_
 
     return (ssize_t)sent_data_count;
 }
+
+ssize_t fs_read(struct file *filp, char __user *buffer, size_t len, loff_t *offset) {
+    if (!filp || !buffer || !offset) {
+        return -EINVAL;
+    }
+
+    if (*offset < 0) {
+        return -EINVAL;
+    }
+
+    if (len == 0) {
+        return 0;
+    }
+
+    struct inode *inode = file_inode(filp);
+
+    if (!inode) {
+        return -EINVAL;
+    }
+
+    if (S_ISDIR(inode->i_mode)) {
+        return -EPERM;
+    }
+
+    vtfs_info *info = inode->i_sb->s_fs_info;
+
+    if (!info || !info->server_info) {
+        return -EINVAL;
+    }
+
+    char *read_buffer = kcalloc(MAX_BODY_SIZE, sizeof(char), GFP_KERNEL);
+
+    if (!read_buffer) {
+        return -ENOMEM;
+    }
+
+    size_t read_data_count = 0;
+
+    while (read_data_count < len) {
+        size_t toRead =
+            len - read_data_count > MAX_BODY_SIZE ? MAX_BODY_SIZE : len - read_data_count;
+
+        int code = server_read(info->server_info, (u64)inode->i_ino, read_buffer, *offset, toRead);
+
+        if (code <= 0) {
+            kfree(read_buffer);
+            return read_data_count > 0 ? (ssize_t)read_data_count : code;
+        }
+
+        size_t received = (size_t)code;
+
+        unsigned long not_copied = copy_to_user(buffer + read_data_count, read_buffer, received);
+
+        ssize_t copied = received - not_copied;
+
+        *offset += (loff_t)copied;
+        read_data_count += copied;
+
+        if (not_copied > 0) {
+            kfree(read_buffer);
+            return read_data_count > 0 ? (ssize_t)read_data_count : -EFAULT;
+        }
+    }
+
+    kfree(read_buffer);
+
+    return (ssize_t)read_data_count;
+}

@@ -60,6 +60,7 @@ static struct inode_operations vtfs_file_inode_operations = {
 
 static struct file_operations vtfs_file_operations = {
     .write = vtfs_write,
+    .read = vtfs_read,
 };
 
 static int vtfs_d_revalidate(struct dentry *dentry, unsigned int flags) {
@@ -391,6 +392,10 @@ int vtfs_link(struct dentry *old_dentry, struct inode *directory, struct dentry 
 
 ssize_t vtfs_write(struct file *filp, const char __user *buffer, size_t len, loff_t *offset) {
     return fs_write(filp, buffer, len, offset);
+}
+
+ssize_t vtfs_read(struct file *filp, char __user *buffer, size_t len, loff_t *offset) {
+    return fs_read(filp, buffer, len, offset);
 }
 
 static struct dentry *vtfs_mount(struct file_system_type *fs_type, int flags, const char *dev_name,

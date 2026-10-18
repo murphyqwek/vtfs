@@ -36,4 +36,6 @@ int fs_iterate(struct inode *directory, struct dir_context *ctx);
 int fs_link(struct dentry *old_dentry, struct inode *directory, struct dentry *new_dentry);
 
 ssize_t fs_write(struct file *filp, const char __user *buffer, size_t len, loff_t *offset);
+
+ssize_t fs_read(struct file *filp, char __user *buffer, size_t len, loff_t *offset);
 #endif
